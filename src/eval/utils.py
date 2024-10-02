@@ -4,9 +4,9 @@ def evaluate_onset_trascription(pred, label):
     """
     takes in prediction and label (np arrays of shape (n)) and returns average distance
     """
-    ratio = np.min(pred)/np.min(label)
+    ratio = np.min(pred[pred > 0])/np.min(label[label > 0])
     error = np.sum((pred - ratio * label)**2)
-    return error
+    return error, ratio * label
 
 def sin_loss(alpha, x, gamma=0, debug=False):
     """

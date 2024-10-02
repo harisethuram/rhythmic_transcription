@@ -5,4 +5,4 @@ python piece_wise_linear_fit.py \
     --loss_fn "sin_loss" \
     --lbda 0.04 \
     --gamma 0.01 \
-    --test_len 23
+    --test_len 95

@@ -1,7 +1,6 @@
 # model that takes in a sequence of float onset times, and fits a piece wise linear function to it
 
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.optimize import minimize, dual_annealing
 from tqdm import tqdm
 import argparse
@@ -100,6 +99,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_len", type=int, default=100000, help="Number of onsets to limit to for testing")
     
     args = parser.parse_args()
+    print("Starting")
     
     if args.loss_fn == "sin_loss":
         loss_fn = sin_loss
@@ -113,6 +113,7 @@ if __name__ == "__main__":
     
     performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
     score_onset_lengths = np.diff(score_onsets)[:args.test_len]    
+    print(len(score_onsets))
 
     segments, alphas = piecewise_fit(performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
     
@@ -135,7 +136,9 @@ if __name__ == "__main__":
     rounded_performance_onset_lengths = np.round(scaled_performance_onset_lengths)
     print("Scaled rounded onsets:", rounded_performance_onset_lengths)
     
+    
     # evaluation
-    error = evaluate_onset_trascription(rounded_performance_onset_lengths, score_onset_lengths)
+    error, scaled_score = evaluate_onset_trascription(rounded_performance_onset_lengths, score_onset_lengths)
+    print("Ground truth onsets:", scaled_score)
     print("Error:", error)
     
