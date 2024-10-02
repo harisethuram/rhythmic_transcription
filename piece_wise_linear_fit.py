@@ -5,7 +5,7 @@ from scipy.optimize import minimize, dual_annealing
 from tqdm import tqdm
 import argparse
 
-from src.preprocess.utils import get_performance_onsets, get_score_onsets
+from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription
 
 def find_optimal_alpha(onset_lengths, loss_fn, gamma=0, initial_alpha=3.0, upper_bound=20):
