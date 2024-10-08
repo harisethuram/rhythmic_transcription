@@ -1,4 +1,42 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+import matplotlib.patches as patches
+import os
+
+def plot_onset_times(ground_truth, prediction, prediction_labels, save_path):
+    # Create a new figure
+    plt.figure(figsize=(9, 4))
+    t = 1
+    vertices = [
+        (0, 0), (t*2, t), (0, 2*t),  # Define a triangle-like shape
+        (0, 0)  # Close the path
+    ]
+    codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.CLOSEPOLY]
+    custom_marker = Path(vertices, codes)
+    
+    # Plot the ground truth onset times
+    plt.scatter(ground_truth, [1] * len(ground_truth), 
+                marker=custom_marker, color='green', s=200, label='Ground Truth')
+    
+    # Plot the prediction onset times
+    plt.scatter(prediction, [0] * len(prediction), 
+                marker=custom_marker, color='blue', s=200, label='Prediction')
+
+    # Add labels above each prediction
+    for x, y, label in zip(prediction, [0] * len(prediction), prediction_labels):
+        plt.text(x, y + 0.1, f'{label:.2f}', ha='center', fontsize=10, color='red')
+
+    # Customize the plot
+    plt.yticks([0, 1], ['Prediction', 'Ground Truth'])
+    plt.xlabel('Onset Times')
+    plt.title('Onset Times: Ground Truth vs Prediction with Labels')
+    plt.legend()
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    os.makedirs(save_path.rsplit('/', 1)[0], exist_ok=True)
+    plt.savefig(save_path)
+
+
 
 def evaluate_onset_trascription(pred, label):
     """
@@ -44,3 +82,10 @@ def round_loss(alpha, x, gamma=0, debug=False):
     if debug:
         print("val:", val, gamma)
     return val
+
+if __name__ == '__main__':
+    # Example usage
+    ground_truth = np.array([1, 2, 4, 6])
+    prediction = np.array([1.5, 3, 4.5, 6])
+    prediction_labels = np.array([0.9, 1.1, 0.8, 1.0])  # Labels for each prediction
+    plot_onset_times(ground_truth, prediction, prediction_labels, "test/test.png")

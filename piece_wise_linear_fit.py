@@ -108,7 +108,8 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid loss function")
     
-    performance_onsets = get_performance_onsets(args.performance_path)
+    # performance_onsets = get_performance_onsets(args.performance_path)
+    
     score_onsets = get_score_onsets(args.score_path)[args.score_part_number]
     
     performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
