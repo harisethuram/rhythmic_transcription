@@ -4,7 +4,7 @@ from matplotlib.path import Path
 import matplotlib.patches as patches
 import os
 
-def plot_onset_times(ground_truth, prediction, prediction_labels, save_path):
+def plot_onset_times(prediction, prediction_labels, ground_truth=None, save_path=None):
     # Create a new figure
     plt.figure(figsize=(9, 4))
     t = 1
@@ -16,8 +16,9 @@ def plot_onset_times(ground_truth, prediction, prediction_labels, save_path):
     custom_marker = Path(vertices, codes)
     
     # Plot the ground truth onset times
-    plt.scatter(ground_truth, [1] * len(ground_truth), 
-                marker=custom_marker, color='green', s=200, label='Ground Truth')
+    if ground_truth is not None:
+        plt.scatter(ground_truth, [1] * len(ground_truth), 
+                    marker=custom_marker, color='green', s=200, label='Ground Truth')
     
     # Plot the prediction onset times
     plt.scatter(prediction, [0] * len(prediction), 
@@ -28,14 +29,30 @@ def plot_onset_times(ground_truth, prediction, prediction_labels, save_path):
         plt.text(x, y + 0.1, f'{label:.2f}', ha='center', fontsize=10, color='red')
 
     # Customize the plot
-    plt.yticks([0, 1], ['Prediction', 'Ground Truth'])
+    if ground_truth is None:
+        plt.yticks([0], ['Prediction'])
+        plt.title('Onset Times: Prediction with Labels')
+        
+    else:
+        plt.yticks([0, 1], ['Prediction', 'Ground Truth'])
+        plt.title('Onset Times: Ground Truth vs Prediction with Labels')
     plt.xlabel('Onset Times')
-    plt.title('Onset Times: Ground Truth vs Prediction with Labels')
     plt.legend()
     plt.grid(axis='x', linestyle='--', alpha=0.7)
     os.makedirs(save_path.rsplit('/', 1)[0], exist_ok=True)
     plt.savefig(save_path)
 
+def scale_onsets(onset_lengths, segments, alphas):
+    start = 0
+    split_onset_lengths = []
+    result = onset_lengths.copy()
+    
+    for segment, alpha in zip(segments, alphas):
+        result[start:segment] = np.round(onset_lengths[start:segment] * alpha)
+        split_onset_lengths.append(result[start:segment].copy())
+        start = segment
+    
+    return result, split_onset_lengths
 
 
 def evaluate_onset_trascription(pred, label):
@@ -88,4 +105,4 @@ if __name__ == '__main__':
     ground_truth = np.array([1, 2, 4, 6])
     prediction = np.array([1.5, 3, 4.5, 6])
     prediction_labels = np.array([0.9, 1.1, 0.8, 1.0])  # Labels for each prediction
-    plot_onset_times(ground_truth, prediction, prediction_labels, "test/test.png")
+    plot_onset_times(prediction, prediction_labels, ground_truth, "test/test.png")

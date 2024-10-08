@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 processed_data/
 test/
+Dataset/
+Dataset.tar.gz
+*.pkl

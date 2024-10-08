@@ -4,9 +4,10 @@ import numpy as np
 from scipy.optimize import minimize, dual_annealing
 from tqdm import tqdm
 import argparse
+import os
 
 from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets
-from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription
+from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
 
 def find_optimal_alpha(onset_lengths, loss_fn, gamma=0, initial_alpha=3.0, upper_bound=20):
     """ Finds the optimal alpha that minimizes the deviation from integer values. 
@@ -90,11 +91,13 @@ def piecewise_fit(onset_lengths, loss_fn, lbda, gamma, debug=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--performance_path", type=str, help="File name of the performance onset times")
-    parser.add_argument("--score_path", type=str, help="File name of the score onset times")
-    parser.add_argument("--score_part_number", type=int, default=0, help="Part number of the score")
+    parser.add_argument("--eval", action="store_true", help="Evaluate the model")
+    parser.add_argument("--score_path", type=str, default=None, help="File name of the score onset times, only required if eval is true")
+    parser.add_argument("--score_part_number", type=int, default=None, help="Part number of the score, only required if eval is true")
     parser.add_argument("--loss_fn", type=str, default="sin_loss", help="Loss function to use (sin_loss or round_loss)")
     parser.add_argument("--lbda", type=float, default=0.04, help="Cost of adding a new segment")
     parser.add_argument("--gamma", type=float, default=0.01, help="Regularization term for alpha")
+    parser.add_argument("--output_dir", type=str, help="Output directory")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--test_len", type=int, default=100000, help="Number of onsets to limit to for testing")
     
@@ -108,27 +111,20 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid loss function")
     
-    # performance_onsets = get_performance_onsets(args.performance_path)
-    
-    score_onsets = get_score_onsets(args.score_path)[args.score_part_number]
+    performance_onsets = get_performance_onsets(args.performance_path)
     
     performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
-    score_onset_lengths = np.diff(score_onsets)[:args.test_len]    
-    print(len(score_onsets))
+    if args.eval:
+        score_onsets = get_score_onsets(args.score_path)[args.score_part_number]
+        score_onset_lengths = np.diff(score_onsets)[:args.test_len]    
+        print(len(score_onsets))
 
     segments, alphas = piecewise_fit(performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
     
-    start = 0
-    split_onsets = []
-    scaled_performance_onset_lengths = performance_onset_lengths.copy()
-    
-    for segment, alpha in zip(segments, alphas):
-        split_onsets.append(performance_onset_lengths[start:segment].copy())
-        scaled_performance_onset_lengths[start:segment] = scaled_performance_onset_lengths[start:segment] * alpha
-        start = segment
+    scaled_performance_onset_lengths, split_onset_lengths = scale_onsets(performance_onset_lengths, segments, alphas)
         
     print("Splits:")
-    for split, alpha in zip(split_onsets, alphas):
+    for split, alpha in zip(split_onset_lengths, alphas):
         print(split, alpha)
         
     print("Segments:", segments)
@@ -136,10 +132,15 @@ if __name__ == "__main__":
     
     rounded_performance_onset_lengths = np.round(scaled_performance_onset_lengths)
     print("Scaled rounded onsets:", rounded_performance_onset_lengths)
+    rounded_performance_onset_times = np.array([0] + list(np.cumsum(rounded_performance_onset_lengths)))
     
-    
+    os.makedirs(args.output_dir, exist_ok=True)
+    plt_path = os.path.join(args.output_dir, "piecewise_fit.png")
     # evaluation
-    error, scaled_score = evaluate_onset_trascription(rounded_performance_onset_lengths, score_onset_lengths)
-    print("Ground truth onsets:", scaled_score)
-    print("Error:", error)
+    if args.eval:
+        error, scaled_score = evaluate_onset_trascription(rounded_performance_onset_lengths, score_onset_lengths)
+        print("Ground truth onsets:", scaled_score)
+        print("Error:", error)
+        plot_onset_times(rounded_performance_onset_lengths, score_onset_lengths, score_onset_lengths, plt_path)
+        
     
