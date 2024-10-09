@@ -1,6 +1,7 @@
 from music21 import converter, note
 import numpy as np
 
+
 def get_score_onsets(midi_file_path):
     """
     takes in a midi file path and returns a list of numpy arrays, each containing the onset times of the notes in a part
@@ -13,7 +14,7 @@ def get_performance_onsets(input_path):
     """   
     with open(input_path, 'r') as f:
         return np.array([float(line.split("\t")[0]) for line in f.readlines()])
-    
+
 # Example usage:
 if __name__ == "__main__":
     # result = analyze_duration(3/4)  # Example: 1.5 quarter notes (a dotted quarter note)

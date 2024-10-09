@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 import pickle as pkl
+import json
 import os
 
 class TokenizedDataset(Dataset):
@@ -9,8 +10,8 @@ class TokenizedDataset(Dataset):
         Args:
             data_dict (dict): Dictionary with file names as keys and tokenized data as values.
         """
-        self.part_id = list(data_dict.keys())
-        self.tokenized_data = [torch.tensor(data_dict[k], dtype=torch.long) for k in self.part_id]
+        self.part_id = [(piece_name, part) for piece_name in data_dict.keys() for part in data_dict[piece_name].keys() if part != "split"]
+        self.tokenized_data = [torch.tensor(data_dict[piece_name][part], dtype=torch.long) for piece_name, part in self.part_id]
 
     def __len__(self):
         return len(self.part_id)
@@ -36,18 +37,19 @@ def preprocess_data(data_path, batch_size, device="cuda") -> DataLoader:
     """
     Preprocess the data, data_path is a dictionary where the keys are the names of the files and the values are the tokenized data. Assumes pad_token_id is 0.
     """
-    data = pkl.load(open(os.path.join(data_path, "tokenized_dataset.pkl"), "rb"))
+    raw_data = json.load(open(os.path.join(data_path, "tokenized_dataset.json"), "r"))
     token_to_id = pkl.load(open(os.path.join(data_path, "token_to_id.pkl"), "rb"))
     id_to_token = pkl.load(open(os.path.join(data_path, "id_to_token.pkl"), "rb"))
-    dataset = TokenizedDataset(data)
+    # dataset = TokenizedDataset(data)
     pad_token_id = 0
     
-    # randomly split the data into training and validation sets
+    train_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "train"})
+    val_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "val"})
     
-    train_size = int(0.9 * len(dataset))
-    val_size = len(dataset) - train_size
-    torch.manual_seed(0)
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    print(len(train_dataset), len(val_dataset))
+    
+    
+    # train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, pad_token_id, device))
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda x: collate_fn(x, pad_token_id, device))

@@ -6,6 +6,7 @@ import pickle as pkl
 from tqdm import tqdm
 import wandb
 import json
+import matplotlib.pyplot as plt
 
 from src.model.model import RhythmLSTM
 from src.preprocess.collate import preprocess_data
@@ -39,10 +40,12 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
     
     args = parser.parse_args()
+    print(f"lr: {args.learning_rate}, batch_size: {args.batch_size}, embed_size: {args.embed_size}, hidden_size: {args.hidden_size}")
+    os.makedirs(args.output_dir, exist_ok=True)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pad_token_id = 0
-        
+    torch.manual_seed(0)
     # Load the processed data
     print("Loading data...")
     train_loader, val_loader, token_to_id, id_to_token = preprocess_data(args.processed_data_dir, args.batch_size, device=device)
@@ -58,7 +61,7 @@ if __name__ == "__main__":
     
     # Training loop
     print("Training model...")
-    loss_vals = {}
+    loss_vals = {"best_val_epoch": None, "best_val_loss": float("inf")}
     
     # initial loss: 
     with torch.no_grad():
@@ -75,16 +78,18 @@ if __name__ == "__main__":
             
         running_val_loss /= len(val_loader)
         loss_vals[0] = {"train": running_train_loss, "val": running_val_loss}
-        
-    for epoch in range(args.num_epochs):
-        pbar = tqdm(train_loader)   
+    
+    best_model = model.state_dict()
+    best_val_loss = float("inf")
+    pbar = tqdm(range(args.num_epochs))
+    for epoch in pbar:
             
         model.train()
         running_train_loss = 0.0
-        for batch_idx, (file_names, data) in enumerate(pbar):
+        for batch_idx, (file_names, data) in enumerate(train_loader):
             loss = step(model, data, criterion, optimizer=optimizer)
             running_train_loss += loss
-            pbar.set_description(f"Epoch {epoch+1}/{args.num_epochs}, Train Loss: {loss}")
+
         running_train_loss /= len(train_loader)
         
         model.eval()
@@ -95,11 +100,38 @@ if __name__ == "__main__":
             running_val_loss /= len(val_loader)
         
         loss_vals[epoch+1] = {"train": running_train_loss, "val": running_val_loss}
-        print("Epoch {}/{}: Avg Train Loss: {}, Avg Val Loss: {}".format(epoch+1, args.num_epochs, running_train_loss, running_val_loss))
         
-    print("Saving...")
-    os.makedirs(args.output_dir, exist_ok=True)
-    torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pth"))    
+        if running_val_loss < loss_vals["best_val_loss"]:
+            loss_vals["best_val_loss"] = running_val_loss
+            loss_vals["best_val_epoch"] = epoch+1
+            torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pth"))
+            
+        pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))
+    
+    
+    
+    
+    
+    # confirm that this is the best model
+    model.load_state_dict(torch.load(os.path.join(args.output_dir, "model.pth"), weights_only=True))
+    model.eval()
+    running_val_loss = 0.0
+    with torch.no_grad():            
+        for i, (file_names, data) in enumerate(val_loader):
+            running_val_loss += step(model, next(iter(val_loader))[1], criterion, val=True)
+        running_val_loss /= len(val_loader)
+    print("best model val loss (recomputed):", running_val_loss)
+    print("Best validation loss (should be the same):", loss_vals["best_val_loss"])
+    print("Best validation epoch:", loss_vals["best_val_epoch"])
+    
+    train_losses = [loss_vals[k]["train"] for k in loss_vals if isinstance(k, int)]
+    val_losses = [loss_vals[k]["val"] for k in loss_vals if isinstance(k, int)]
+    plt.plot(range(len(train_losses)), train_losses, label="Train Loss")
+    plt.plot(range(len(val_losses)), val_losses, label="Val Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.savefig(os.path.join(args.output_dir, "loss_plot.png"))
     
     with open(os.path.join(args.output_dir, "loss_vals.json"), "w") as f:
         json.dump(loss_vals, f, indent=4)
