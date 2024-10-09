@@ -101,7 +101,7 @@ def get_rhythms_and_expressions(part, want_barlines=False):
         # check if note is a rest
         if isinstance(element, music21.note.Rest):
             curr_note["is_rest"] = True
-       
+        
         rhythms_and_expressions.append(curr_note)
             
         if count > 40:

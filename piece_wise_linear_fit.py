@@ -112,12 +112,13 @@ if __name__ == "__main__":
         raise ValueError("Invalid loss function")
     
     performance_onsets = get_performance_onsets(args.performance_path)
+    print("performance len:", len(performance_onsets))
     
     performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
     if args.eval:
         score_onsets = get_score_onsets(args.score_path)[args.score_part_number]
         score_onset_lengths = np.diff(score_onsets)[:args.test_len]    
-        print(len(score_onsets))
+        print("score len:", len(score_onsets))
 
     segments, alphas = piecewise_fit(performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
     

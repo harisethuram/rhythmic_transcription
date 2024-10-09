@@ -1,4 +1,3 @@
-import mido
 from music21 import converter, note
 import numpy as np
 
@@ -20,4 +19,4 @@ if __name__ == "__main__":
     # result = analyze_duration(3/4)  # Example: 1.5 quarter notes (a dotted quarter note)
     # print(result)  # Expected output: (1.0, 0.5, True, False)
     # print(get_onset_times("Dataset/05_Entertainer_tpt_tpt/Sco_05_Entertainer_tpt_tpt.mid"))
-    print(get_performance_onset_times("Dataset/06_Entertainer_sax_sax/Notes_1_sax_06_Entertainer.txt"))
+    print(get_performance_onsets("Dataset/06_Entertainer_sax_sax/Notes_1_sax_06_Entertainer.txt"))

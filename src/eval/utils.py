@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
-import matplotlib.patches as patches
 import os
 
 def plot_onset_times(prediction, prediction_labels, ground_truth=None, save_path=None):

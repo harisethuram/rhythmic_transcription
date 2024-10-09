@@ -13,7 +13,6 @@ if __name__ == "__main__":
     
     val_len = int(0.5 * len(dirs))
     test_len = len(dirs) - val_len
-
     metadata = []
     
     for d in dirs:
@@ -28,14 +27,12 @@ if __name__ == "__main__":
             
     
     df = pandas.DataFrame(metadata, columns=["piece_id", "piece_name", "part_id", "instrument", "notes_path", "score_path"])
-
     
     # add split column, where rows of same piece_name are in the same split
     piece_name_to_split = {piece_name: random.choice(["val", "test"]) for piece_name in df["piece_name"].unique()}
     
     splits = [piece_name_to_split[piece_name] for piece_name in df["piece_name"]]
     df.insert(6, "split", splits)    
-    
     
     # df.insert(6, "split", split)
     df = df.sort_values(["piece_id", "part_id"])

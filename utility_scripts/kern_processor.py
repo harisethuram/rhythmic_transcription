@@ -29,13 +29,10 @@ if __name__ == "__main__":
         if count > args.test_limit:
             break
         count += 1
-        # print(file)
         
         parts = converter.parse(os.path.join(args.input_dir, file)).parts
         for i, part in enumerate(parts):
             all_rhythms_and_expressions[(file, i)] = get_rhythms_and_expressions(part, args.want_barlines)
-            # print(all_rhythms_and_expressions[(file, i)])
-            # input()
     
     # get all unique note tokens
     note_tokens = []
@@ -86,6 +83,7 @@ if __name__ == "__main__":
     
     # save the tokenized output and dictionaries as pickle files
     print("Writing tokenized output to file...")
+    os.makedirs(args.output_dir, exist_ok=True)
     with open(os.path.join(args.output_dir, "tokenized_dataset.pkl"), "wb") as f:
         pkl.dump(all_rhythms_and_expressions_tokenized, f)
         
