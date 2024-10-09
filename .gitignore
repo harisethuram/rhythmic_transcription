@@ -9,3 +9,5 @@ test/
 Dataset/
 Dataset.tar.gz
 *.pkl
+models/
+wandb/
