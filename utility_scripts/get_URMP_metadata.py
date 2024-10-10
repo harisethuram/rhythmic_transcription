@@ -20,7 +20,7 @@ if __name__ == "__main__":
         piece_name = d.split("_")[1]
         score_name = os.path.join(data_dir, d, f"Sco_{d}.mid")
         for file in os.listdir(os.path.join(data_dir, d)):
-            if file.startswith("AuSep"):
+            if file.startswith("Notes"):
                 part_id = int(file.split("_")[1])
                 instrument = file.split("_")[2]
                 metadata.append([piece_id, piece_name, part_id, instrument, os.path.join(data_dir, d, file), score_name])

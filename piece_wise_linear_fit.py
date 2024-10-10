@@ -5,6 +5,7 @@ from scipy.optimize import minimize, dual_annealing
 from tqdm import tqdm
 import argparse
 import os
+import json
 
 from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
@@ -114,15 +115,15 @@ if __name__ == "__main__":
     performance_onsets = get_performance_onsets(args.performance_path)
     print("performance len:", len(performance_onsets))
     
-    performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
+    raw_performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
     if args.eval:
-        score_onsets = get_score_onsets(args.score_path)[args.score_part_number]
-        score_onset_lengths = np.diff(score_onsets)[:args.test_len]    
-        print("score len:", len(score_onsets))
+        raw_score_onsets = get_score_onsets(args.score_path)[args.score_part_number-1]
+        raw_score_onset_lengths = np.diff(raw_score_onsets)[:args.test_len]    
+        print("score len:", len(raw_score_onsets))
 
-    segments, alphas = piecewise_fit(performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
+    segments, alphas = piecewise_fit(raw_performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
     
-    scaled_performance_onset_lengths, split_onset_lengths = scale_onsets(performance_onset_lengths, segments, alphas)
+    scaled_performance_onset_lengths, split_onset_lengths = scale_onsets(raw_performance_onset_lengths, segments, alphas)
         
     print("Splits:")
     for split, alpha in zip(split_onset_lengths, alphas):
@@ -130,18 +131,20 @@ if __name__ == "__main__":
         
     print("Segments:", segments)
     print("Scaled onsets:", scaled_performance_onset_lengths)
-    
-    rounded_performance_onset_lengths = np.round(scaled_performance_onset_lengths)
-    print("Scaled rounded onsets:", rounded_performance_onset_lengths)
-    rounded_performance_onset_times = np.array([0] + list(np.cumsum(rounded_performance_onset_lengths)))
+
+    scaled_performance_onset_times = np.array([0] + list(np.cumsum(scaled_performance_onset_lengths)))
     
     os.makedirs(args.output_dir, exist_ok=True)
     plt_path = os.path.join(args.output_dir, "piecewise_fit.png")
+    
     # evaluation
     if args.eval:
-        error, scaled_score = evaluate_onset_trascription(rounded_performance_onset_lengths, score_onset_lengths)
-        print("Ground truth onsets:", scaled_score)
+        error, scaled_score_onset_lengths = evaluate_onset_trascription(scaled_performance_onset_lengths, raw_score_onset_lengths)
+        scaled_score_onset_times = np.array([0] + list(np.cumsum(scaled_score_onset_lengths)))
+        with open(os.path.join(args.output_dir, "results.json"), "w") as f:
+            json.dump({"error": error, "prediction": scaled_score_onset_lengths.tolist(), "ground_truth": scaled_score_onset_lengths.tolist()}, f)
+        print("Ground truth onsets:", scaled_score_onset_lengths)
         print("Error:", error)
-        plot_onset_times(rounded_performance_onset_lengths, score_onset_lengths, score_onset_lengths, plt_path)
+        plot_onset_times(scaled_performance_onset_times, raw_performance_onset_lengths, scaled_score_onset_times, plt_path)
         
     

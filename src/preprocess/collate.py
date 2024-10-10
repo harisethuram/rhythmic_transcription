@@ -46,11 +46,9 @@ def preprocess_data(data_path, batch_size, device="cuda") -> DataLoader:
     train_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "train"})
     val_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "val"})
     
-    print(len(train_dataset), len(val_dataset))
+    # print(len(train_dataset), len(val_dataset))
     
-    
-    # train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-    
+        
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: collate_fn(x, pad_token_id, device))
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda x: collate_fn(x, pad_token_id, device))
     

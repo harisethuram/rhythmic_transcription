@@ -8,7 +8,7 @@ import wandb
 import json
 import matplotlib.pyplot as plt
 
-from src.model.model import RhythmLSTM
+from src.model.RhythmLSTM import RhythmLSTM
 from src.preprocess.collate import preprocess_data
 
 def step(model, data, criterion, optimizer=None, val=False):
@@ -106,11 +106,7 @@ if __name__ == "__main__":
             loss_vals["best_val_epoch"] = epoch+1
             torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pth"))
             
-        pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))
-    
-    
-    
-    
+        pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))    
     
     # confirm that this is the best model
     model.load_state_dict(torch.load(os.path.join(args.output_dir, "model.pth"), weights_only=True))

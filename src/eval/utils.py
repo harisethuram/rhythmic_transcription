@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 import os
+import math
 
-def plot_onset_times(prediction, prediction_labels, ground_truth=None, save_path=None):
+def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, save_path=None):
     # Create a new figure
     plt.figure(figsize=(9, 4))
     t = 1
@@ -17,15 +18,21 @@ def plot_onset_times(prediction, prediction_labels, ground_truth=None, save_path
     # Plot the ground truth onset times
     if ground_truth is not None:
         plt.scatter(ground_truth, [1] * len(ground_truth), 
-                    marker=custom_marker, color='green', s=200, label='Ground Truth')
+                    marker=custom_marker, color='green', s=400, label='Ground Truth')
+        
+        for x, y, label in zip(ground_truth, [1] * len(ground_truth), ground_truth):
+            plt.text(x, y - 0.1, f'{int(label)}', ha='center', fontsize=9, color='blue')
     
     # Plot the prediction onset times
     plt.scatter(prediction, [0] * len(prediction), 
-                marker=custom_marker, color='blue', s=200, label='Prediction')
+                marker=custom_marker, color='blue', s=400, label='Prediction')
 
     # Add labels above each prediction
-    for x, y, label in zip(prediction, [0] * len(prediction), prediction_labels):
-        plt.text(x, y + 0.1, f'{label:.2f}', ha='center', fontsize=10, color='red')
+    for x, y, label in zip(prediction, [0] * len(prediction), raw_prediction_labels):
+        plt.text(x, y + 0.1, f'{label:.2f}', ha='center', fontsize=9, color='red')
+    
+    for x, y, label in zip(prediction, [0] * len(prediction), prediction):
+        plt.text(x, y - 0.05, f'{int(label)}', ha='center', fontsize=9, color='blue')
 
     # Customize the plot
     if ground_truth is None:
@@ -50,17 +57,26 @@ def scale_onsets(onset_lengths, segments, alphas):
         result[start:segment] = np.round(onset_lengths[start:segment] * alpha)
         split_onset_lengths.append(result[start:segment].copy())
         start = segment
+    result = result.astype(int)
+    result = result/math.gcd(*result) # if alpha is too large, then try to scale down
     
     return result, split_onset_lengths
 
 
 def evaluate_onset_trascription(pred, label):
     """
-    takes in prediction and label (np arrays of shape (n)) and returns average distance
+    takes in prediction and label (np arrays of shape (n)) and returns average distance, and scaled label
     """
+    
     ratio = np.min(pred[pred > 0])/np.min(label[label > 0])
-    error = np.sum((pred - ratio * label)**2)
-    return error, ratio * label
+    scaled_label = ratio * label
+    
+    if len(pred) != len(label):
+        print("Lengths of prediction and label do not match!")
+        return float("inf"), scaled_label
+    
+    error = np.sum((pred - scaled_label)**2)
+    return error, scaled_label
 
 def sin_loss(alpha, x, gamma=0, debug=False):
     """
