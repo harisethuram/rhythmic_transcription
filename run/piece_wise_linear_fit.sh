@@ -17,7 +17,7 @@ python piece_wise_linear_fit.py \
     --lbda 10 \
     --gamma 0.01 \
     --output_dir $output_dir \
-    --test_len 10 \
+    # --test_len 10 \
     
 # "data/URMP/08_Spring_fl_vn/Notes_1_fl_08_Spring.txt" \
 

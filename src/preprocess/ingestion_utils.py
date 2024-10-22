@@ -7,7 +7,14 @@ def get_score_onsets(midi_file_path):
     takes in a midi file path and returns a list of numpy arrays, each containing the onset times of the notes in a part
     """
     return [np.array([element.offset for element in part.flat.notes]) for part in converter.parse(midi_file_path).parts]
- 
+
+def get_score_note_lengths(midi_file_path):
+    """
+    takes in a midi file path and returns two lists of numpy arrays. In the first, each containing the duration of the notes in a part. In the second, each stores whether the event is a note or rest. 
+    """
+    score = converter.parse(midi_file_path)
+    return [np.array([element.duration.quarterLength for element in part.flat.notesAndRests]) for part in score.parts], [np.array([isinstance(element, note.Note) for element in part.flat.notesAndRests]) for part in score.parts]
+
 def get_performance_onsets(input_path):
     """
     takes in a text file path and returns a numpy array of onset times

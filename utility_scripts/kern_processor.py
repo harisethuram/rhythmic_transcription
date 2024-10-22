@@ -10,40 +10,43 @@ import sys
 import random
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, serialize_json
+from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, serialize_json, get_tuple
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Converts a directory of kern files into a list of tokens.")
-    parser.add_argument("--input_dir", type=str, help="The directory containing the kern files.")
+    parser.add_argument("--input_dirs", type=str, help="Comma-separated list of directories containing kern files.")
     parser.add_argument("--output_dir", type=str, help="The file to write the tokenized output to.")
     parser.add_argument("--train_split", type=float, default=0.9, help="The proportion of the data to use for training.")
     parser.add_argument("--want_barlines", action="store_true", help="Whether or not to include barlines in the output.")
+    parser.add_argument("--no_expressions", action="store_true", help="Whether or not to include expressions in the output.")
     parser.add_argument("--test_limit", type=int, default=100000, help="The number of files to process for testing")
     args = parser.parse_args()
 
+    want_expressions = not args.no_expressions
     # get the rhyths and expressions for every part for every file in the input directory
     print("Getting rhythms and expressions for all parts in all files...")
     all_rhythms_and_expressions = {}
-    count = 0
-    for file in tqdm(os.listdir(args.input_dir)):
-        if count > args.test_limit:
-            break
-        count += 1
-        
-        parts = converter.parse(os.path.join(args.input_dir, file)).parts
-        all_rhythms_and_expressions[file] = {}
-        for i, part in enumerate(parts):
-            all_rhythms_and_expressions[file][i] = get_rhythms_and_expressions(part, args.want_barlines)
+    for dataset in args.input_dirs.split(","):
+        for file in tqdm(os.listdir(dataset)):
+            if file.split(".")[-1] != "krn":
+                continue
+            
+            parts = converter.parse(os.path.join(dataset, file)).parts
+            # print(len(parts))
+            all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
+            for i, part in enumerate(parts):
+                all_rhythms_and_expressions[os.path.join(dataset, file)][i] = get_rhythms_and_expressions(part, args.want_barlines, want_expressions)
     
     # get all unique note tokens
     note_tokens = []
+    print(all_rhythms_and_expressions.keys())
     for all_parts in all_rhythms_and_expressions.values():
+        
         for part in all_parts.values():
             for note in part:
                 note_tokens.append((note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"]))
-
     unique_note_tokens = list(set(note_tokens))
 
     # assign token ids to each unique note token
@@ -52,13 +55,17 @@ if __name__ == "__main__":
     # barline
     
     # pad token
-    token_to_id[(-1, False, False, False, False, False, False)] = 0
-    id_to_token[0] = (-1, False, False, False, False, False, False)
-    offset = 1
+    token_to_id[get_tuple(-1)] = 0
+    id_to_token[0] = get_tuple(-1)
+    
+    # unknown token
+    token_to_id[get_tuple(-2)] = 1
+    id_to_token[1] = get_tuple(-2)
+    offset = 2
     
     if args.want_barlines:
-        token_to_id[(0, False, False, False, False, False, False)] = 1
-        id_to_token[1] = (0, False, False, False, False, False, False)
+        token_to_id[get_tuple(0)] = 2
+        id_to_token[2] = get_tuple(0)
         offset += 1
     
     for i, token in enumerate(unique_note_tokens):
@@ -75,11 +82,11 @@ if __name__ == "__main__":
         for part, notes in parts.items():
             rhythms_and_expressions_tokenized = []
             for note in notes:
-                rhythms_and_expressions_tokenized.append(token_to_id[(note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"])])
+                rhythms_and_expressions_tokenized.append(token_to_id[get_tuple(note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"])])
             all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
         
         all_rhythms_and_expressions_tokenized[piece_name]["split"] = split_names[int(random.random() > args.train_split)]
-    # print(all_rhythms_and_expressions_tokenized)
+    
     # save the tokenized output and dictionaries as pickle files
     print("Writing tokenized output to file...")
     os.makedirs(args.output_dir, exist_ok=True)

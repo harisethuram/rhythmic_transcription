@@ -49,11 +49,10 @@ def analyze_duration(dur):
 
         return base_value, dot_value, is_dotted, is_triplet
 
-def get_rhythms_and_expressions(part, want_barlines=False):
+def get_rhythms_and_expressions(part, want_barlines=False, want_expressions=True):
     current_measure = 0
 
     # Iterate through all elements in the part
-    count = 0
 
     rhythms_and_expressions = []
 
@@ -67,10 +66,12 @@ def get_rhythms_and_expressions(part, want_barlines=False):
                 "staccato": False,
                 "tied_forward": False,
                 "is_rest": False,
+                "pitch": -1
             })
             current_measure = element.measureNumber
             
         duration = analyze_duration(element.duration)
+        
         curr_note = {
             "duration": duration[0],
             "dotted": duration[2],
@@ -79,37 +80,43 @@ def get_rhythms_and_expressions(part, want_barlines=False):
             "staccato": False,
             "tied_forward": False,
             "is_rest": False,
+            # "pitch": eleme
         }
+        if isinstance(element, music21.note.Note):
+            curr_note["pitch"] = str(element.pitch)
+        else:
+            curr_note["pitch"] = str(element.pitches)
 
         # check if note is tied
         if element.tie:
             if element.tie.type == "start":
                 curr_note["tied_forward"] = True
-
+        if want_expressions:
         # check if note is staccato
-        for articulation in element.articulations:
-            if isinstance(articulation, music21.articulations.Staccato):
-                curr_note["staccato"] = True
-                break
-        
-        # check if note has fermata
-        if element.expressions:
-            for expression in element.expressions:
-                if isinstance(expression, music21.expressions.Fermata):
-                    curr_note["fermata"] = True
+            for articulation in element.articulations:
+                if isinstance(articulation, music21.articulations.Staccato):
+                    curr_note["staccato"] = True
                     break
+            
+            # check if note has fermata
+            if element.expressions:
+                for expression in element.expressions:
+                    if isinstance(expression, music21.expressions.Fermata):
+                        curr_note["fermata"] = True
+                        break
 
         # check if note is a rest
         if isinstance(element, music21.note.Rest):
             curr_note["is_rest"] = True
+        # print(curr_note)
+        # input()
         
         rhythms_and_expressions.append(curr_note)
-            
-        if count > 40:
-            break
-        count += 1
 
     return rhythms_and_expressions
+
+def get_tuple(duration, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False):
+    return (duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)
 
 def serialize_json(obj, indent=4, current_indent=0):
     """
