@@ -10,7 +10,7 @@ def analyze_duration(dur):
         - whether the note is a triplet (True/False)
         
         Parameters:
-        float_duration (float): The duration in terms of quarter notes.
+        dur (float): The duration in terms of quarter notes.
         
         Returns:
         tuple: (base_value, dot_value, is_dotted, is_triplet)
@@ -49,7 +49,7 @@ def analyze_duration(dur):
 
         return base_value, dot_value, is_dotted, is_triplet
 
-def get_rhythms_and_expressions(part, want_barlines=False, want_expressions=True):
+def get_rhythms_and_expressions(part, want_barlines=False, no_expressions=True):
     current_measure = 0
 
     # Iterate through all elements in the part
@@ -91,8 +91,8 @@ def get_rhythms_and_expressions(part, want_barlines=False, want_expressions=True
         if element.tie:
             if element.tie.type == "start":
                 curr_note["tied_forward"] = True
-        if want_expressions:
-        # check if note is staccato
+        if not no_expressions:
+            # check if note is staccato
             for articulation in element.articulations:
                 if isinstance(articulation, music21.articulations.Staccato):
                     curr_note["staccato"] = True
@@ -137,3 +137,41 @@ def serialize_json(obj, indent=4, current_indent=0):
         return '[' + ', '.join(serialized_items) + ']'
     else:
         return json.dumps(obj)
+
+def tokenizer(want_barlines, no_expressions):
+    # note properties: duration, dotted, triplet, fermata, staccato, tied_forward, is_rest
+    durations = [2**i for i in range(-4, 4)]
+    properties = [False, True]
+    articulation_properties = [False] if no_expressions else [False, True]
+    
+    # Generate all possible combinations of note properties
+    token_to_id = {}
+    
+    # Add special tokens for padding and unknown tokens
+    count = 0
+    # pad token
+    token_to_id[get_tuple(-1)] = count
+    count += 1
+    
+    # unknown token
+    token_to_id[get_tuple(-2)] = count
+    count += 1
+    
+    # barline
+    if want_barlines:    
+        token_to_id[get_tuple(0)] = count
+        count += 1
+    
+    for duration in durations:
+        for dotted in properties:
+            for triplet in properties:
+                for fermata in articulation_properties:
+                    for staccato in articulation_properties:
+                        for tied_forward in properties:
+                            for is_rest in properties:
+                                token_to_id[get_tuple(duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)] = count
+                                count += 1
+    
+    id_to_token = {v: k for k, v in token_to_id.items()}
+    
+    return token_to_id, id_to_token

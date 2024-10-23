@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import pickle as pkl
 from tqdm import tqdm
-import wandb
 import json
 import matplotlib.pyplot as plt
 
@@ -94,7 +93,7 @@ if __name__ == "__main__":
         
         model.eval()
         running_val_loss = 0.0
-        with torch.no_grad():            
+        with torch.no_grad():
             for i, (file_names, data) in enumerate(val_loader):
                 running_val_loss += step(model, next(iter(val_loader))[1], criterion, val=True)
             running_val_loss /= len(val_loader)
@@ -108,17 +107,24 @@ if __name__ == "__main__":
             
         pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))    
     
+    
+    # save the model
+    torch.save(model, os.path.join(args.output_dir, "model.pth"))
     # confirm that this is the best model
-    model.load_state_dict(torch.load(os.path.join(args.output_dir, "model.pth"), weights_only=True))
+    model = torch.load(os.path.join(args.output_dir, "model.pth"))
     model.eval()
+
+    
     running_val_loss = 0.0
-    with torch.no_grad():            
+    with torch.no_grad():
         for i, (file_names, data) in enumerate(val_loader):
             running_val_loss += step(model, next(iter(val_loader))[1], criterion, val=True)
         running_val_loss /= len(val_loader)
     print("best model val loss (recomputed):", running_val_loss)
     print("Best validation loss (should be the same):", loss_vals["best_val_loss"])
     print("Best validation epoch:", loss_vals["best_val_epoch"])
+    
+    
     
     train_losses = [loss_vals[k]["train"] for k in loss_vals if isinstance(k, int)]
     val_losses = [loss_vals[k]["val"] for k in loss_vals if isinstance(k, int)]
@@ -130,7 +136,4 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(args.output_dir, "loss_plot.png"))
     
     with open(os.path.join(args.output_dir, "loss_vals.json"), "w") as f:
-        json.dump(loss_vals, f, indent=4)
-            
-            
-            
+        json.dump(loss_vals, f, indent=4)            

@@ -10,8 +10,7 @@ import sys
 import random
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, serialize_json, get_tuple
-
+from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, serialize_json, get_tuple, tokenizer
 
 
 if __name__ == "__main__":
@@ -24,7 +23,6 @@ if __name__ == "__main__":
     parser.add_argument("--test_limit", type=int, default=100000, help="The number of files to process for testing")
     args = parser.parse_args()
 
-    want_expressions = not args.no_expressions
     # get the rhyths and expressions for every part for every file in the input directory
     print("Getting rhythms and expressions for all parts in all files...")
     all_rhythms_and_expressions = {}
@@ -34,44 +32,22 @@ if __name__ == "__main__":
                 continue
             
             parts = converter.parse(os.path.join(dataset, file)).parts
-            # print(len(parts))
             all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
             for i, part in enumerate(parts):
-                all_rhythms_and_expressions[os.path.join(dataset, file)][i] = get_rhythms_and_expressions(part, args.want_barlines, want_expressions)
+                all_rhythms_and_expressions[os.path.join(dataset, file)][i] = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions)
     
     # get all unique note tokens
     note_tokens = []
-    print(all_rhythms_and_expressions.keys())
     for all_parts in all_rhythms_and_expressions.values():
-        
         for part in all_parts.values():
             for note in part:
                 note_tokens.append((note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"]))
     unique_note_tokens = list(set(note_tokens))
-
-    # assign token ids to each unique note token
-    token_to_id = {}
-    id_to_token = {}
-    # barline
     
-    # pad token
-    token_to_id[get_tuple(-1)] = 0
-    id_to_token[0] = get_tuple(-1)
-    
-    # unknown token
-    token_to_id[get_tuple(-2)] = 1
-    id_to_token[1] = get_tuple(-2)
-    offset = 2
-    
-    if args.want_barlines:
-        token_to_id[get_tuple(0)] = 2
-        id_to_token[2] = get_tuple(0)
-        offset += 1
-    
-    for i, token in enumerate(unique_note_tokens):
-        token_to_id[token] = i + offset
-        id_to_token[i + offset] = token
-    
+    token_to_id, id_to_token = tokenizer(args.want_barlines, args.no_expressions)
+    max_id = max(token_to_id.values())
+    print(token_to_id)
+    count = max_id + 1
     print("Number of unique note tokens:", len(token_to_id.keys()))
     
     print("Tokenizing rhythms and expressions...")
@@ -82,11 +58,17 @@ if __name__ == "__main__":
         for part, notes in parts.items():
             rhythms_and_expressions_tokenized = []
             for note in notes:
-                rhythms_and_expressions_tokenized.append(token_to_id[get_tuple(note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"])])
+                tup = get_tuple(note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"])
+                if tup not in token_to_id.keys():
+                    print("Token not found in dictionary:", tup, "in piece", piece_name, "part", part)
+                    token_to_id[tup] = count
+                    id_to_token[count] = tup
+                    count += 1
+                rhythms_and_expressions_tokenized.append(token_to_id[tup])
             all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
         
         all_rhythms_and_expressions_tokenized[piece_name]["split"] = split_names[int(random.random() > args.train_split)]
-    
+    print("Number of unique note tokens after tokenization:", len(token_to_id.keys()))
     # save the tokenized output and dictionaries as pickle files
     print("Writing tokenized output to file...")
     os.makedirs(args.output_dir, exist_ok=True)

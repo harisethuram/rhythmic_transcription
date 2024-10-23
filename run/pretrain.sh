@@ -10,7 +10,7 @@ for lr in "${lrs[@]}"; do
                 echo "Running pretrain with lr=$lr, batch_size=$batch_size, embed_size=$embed_size, hidden_size=$hidden_size"
                 python pretrain.py \
                     --processed_data_dir "processed_data/bach_fugues"\
-                    --output_dir "results/bach_fugues/pretrain_hparam_search/lr_$lr/b_size_$batch_size/emb_$embed_size/hid_$hidden_size"\
+                    --output_dir "results/bach_fugues_new_tokenizer/pretrain_hparam_search/lr_$lr/b_size_$batch_size/emb_$embed_size/hid_$hidden_size"\
                     --embed_size $embed_size \
                     --hidden_size $hidden_size \
                     --num_layers 2 \
