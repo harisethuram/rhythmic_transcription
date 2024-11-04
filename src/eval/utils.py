@@ -36,8 +36,6 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
     
     # Plot the ground truth onset times
     if ground_truth is not None:
-        
-        
         plt.scatter(ground_truth, [1] * len(ground_truth), 
                     marker=custom_marker, color='green', s=400, label='Ground Truth')
         
@@ -68,7 +66,7 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
     plt.savefig(save_path)
     # input()
 
-def scale_onsets(onset_lengths, segments, alphas):
+def scale_onsets(onset_lengths, segments, alphas, verbose=False):
     start = 0
     split_onset_lengths = []
     result = onset_lengths.copy()
@@ -78,7 +76,8 @@ def scale_onsets(onset_lengths, segments, alphas):
         split_onset_lengths.append(result[start:segment].copy())
         start = segment
     result = result.astype(int)
-    result = result/math.gcd(*result) # if alpha is too large, then try to scale down
+    # print("Result before gcd division:", result)
+    result = np.round(result/(math.gcd(*result) + 1e-8))
     
     return result, split_onset_lengths
 

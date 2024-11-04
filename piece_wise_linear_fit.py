@@ -8,7 +8,7 @@ import os
 import json
 
 
-from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets
+from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets, get_score_note_lengths, get_performance_note_lengths
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
 
 
@@ -114,6 +114,9 @@ if __name__ == "__main__":
     parser.add_argument("--test_len", type=int, default=100000, help="Number of onsets to limit to for testing")
     
     args = parser.parse_args()
+    print("Score info:", args.score_path, args.score_part_number)
+    print("eval:", args.eval)
+    
     print("Starting")
     
     if args.loss_fn == "sin_loss":
@@ -150,7 +153,8 @@ if __name__ == "__main__":
         raw_score_onsets = get_score_onsets(args.score_path)[args.score_part_number-1]
         raw_score_onset_lengths = np.diff(raw_score_onsets)[:args.test_len]    
         print("score len:", len(raw_score_onsets))
-
+        
+        
         # if you have information of the score, can you find a good alpha for the ground truth? Then scale the raw by this ground truth alpha and evaluate
         
         
@@ -167,5 +171,33 @@ if __name__ == "__main__":
         with open(os.path.join(args.output_dir, "results.json"), "w") as f:
             json.dump({"error": str(error), "prediction": scaled_performance_onset_times.tolist(), "ground_truth": scaled_score_onset_times.tolist()}, f)
     
-    print()
+    # convert onsets to note and rest durations
+    
+    performance_note_info = get_performance_note_lengths(args.performance_path)
+    performance_note_lengths = performance_note_info[:,0]
+    performance_rest_lengths = performance_note_info[:,1]
+    
+    # scale the note lengths
+    scaled_note_lengths, _ = scale_onsets(performance_note_lengths, segments, alphas)
+    scaled_rest_lengths = scaled_performance_onset_lengths - scaled_note_lengths[:-1]
+    print("Scaled Onset lenghts:", scaled_performance_onset_lengths)
+    print("Note lengths:", performance_note_lengths)
+    print("Scaled note lengths:", scaled_note_lengths)
+    
+    print("Rest lengths:", performance_rest_lengths)
+    print("Scaled rest lengths:", scaled_rest_lengths)
+
+    
+    # if args.eval:
+        
+    all_score_note_length_info = get_score_note_lengths(args.score_path, args.score_part_number)
+    # score_note_lengths = all_score_note_length_info[0][args.score_part_number-1]
+    # score_note_or_rest = all_score_note_length_info[1][args.score_part_number-1]
+    print("Score note lengths:", all_score_note_length_info)
+    # print(all_score_note_length_info)
+
+    input()
+    # 
+    
+    
     
