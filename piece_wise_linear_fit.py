@@ -8,7 +8,7 @@ import os
 import json
 
 
-from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets, get_score_note_lengths, get_performance_note_lengths
+from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets, get_score_note_lengths, get_performance_note_lengths, get_performance_pitches
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
 
 
@@ -134,15 +134,6 @@ if __name__ == "__main__":
     segments, alphas = piecewise_fit(raw_performance_onset_lengths, loss_fn, args.lbda, gamma=args.gamma, debug=args.debug)
     
     scaled_performance_onset_lengths, split_onset_lengths = scale_onsets(raw_performance_onset_lengths, segments, alphas)
-        
-    # print("Splits:")
-    # for split, alpha in zip(split_onset_lengths, alphas):
-    #     print(split, alpha)
-        
-    # print("Segments:", segments)
-    # print("Scaled onsets:", scaled_performance_onset_lengths)
-
-    # scaled_performance_onset_times = np.array([0] + list(np.cumsum(scaled_performance_onset_lengths)))
     
     os.makedirs(args.output_dir, exist_ok=True)
     plt_path = os.path.join(args.output_dir, "piecewise_fit.png")
@@ -152,20 +143,12 @@ if __name__ == "__main__":
         
         raw_score_onsets = get_score_onsets(args.score_path)[args.score_part_number-1]
         raw_score_onset_lengths = np.diff(raw_score_onsets)[:args.test_len]    
-        print("score len:", len(raw_score_onsets))
-        
-        
-        # if you have information of the score, can you find a good alpha for the ground truth? Then scale the raw by this ground truth alpha and evaluate
-        
-        
+        print("score len:", len(raw_score_onsets))  
         
         error, scaled_performance_onset_times, scaled_score_onset_times, scaled_score_onset_lengths, alignment = evaluate_onset_trascription(scaled_performance_onset_lengths, raw_score_onset_lengths)
-        # scaled_score_onset_times = np.array([0] + list(np.cumsum(scaled_score_onset_lengths)))
         
-        # print("Ground truth onsets:", scaled_score_onset_lengths)
         print("Error:", error)
         # plot only the first 20 onsets
-        # plot_onset_times(scaled_performance_onset_times[:20], raw_performance_onset_lengths[:20], scaled_score_onset_times[:20], plt_path)
         plot_onset_times(scaled_performance_onset_times, raw_performance_onset_lengths, scaled_score_onset_times, raw_score_onset_lengths, alignment, plt_path)
         
         with open(os.path.join(args.output_dir, "results.json"), "w") as f:
@@ -174,30 +157,32 @@ if __name__ == "__main__":
     # convert onsets to note and rest durations
     
     performance_note_info = get_performance_note_lengths(args.performance_path)
-    performance_note_lengths = performance_note_info[:,0]
-    performance_rest_lengths = performance_note_info[:,1]
+    performance_note_lengths = performance_note_info[:-1,0]
+    performance_rest_lengths = performance_note_info[:-1,1]
+    total_lengths = performance_note_lengths + performance_rest_lengths
+    standardized_performance_note_lengths = performance_note_lengths / total_lengths
+    standardized_performance_rest_lengths = performance_rest_lengths / total_lengths
+    
+    pitches = get_performance_pitches(args.performance_path)[:-1]
+    # print("Pitches:", pitches)
+    
     
     # scale the note lengths
-    scaled_note_lengths, _ = scale_onsets(performance_note_lengths, segments, alphas)
-    scaled_rest_lengths = scaled_performance_onset_lengths - scaled_note_lengths[:-1]
-    print("Scaled Onset lenghts:", scaled_performance_onset_lengths)
-    print("Note lengths:", performance_note_lengths)
-    print("Scaled note lengths:", scaled_note_lengths)
-    
-    print("Rest lengths:", performance_rest_lengths)
-    print("Scaled rest lengths:", scaled_rest_lengths)
-
-    
-    # if args.eval:
+    # scaled_note_lengths, _ = scale_onsets(performance_note_lengths, segments, alphas)
+    # scaled_rest_lengths = scaled_performance_onset_lengths - scaled_note_lengths[:-1]
+    # print("Scaled Onset lenghts:", scaled_performance_onset_lengths)
+    # print("Standardized Note lengths:", standardized_performance_note_lengths)
+    # print("Standardized note lengths:", standardized_performance_rest_lengths)
+    all_info = np.vstack((scaled_performance_onset_lengths, standardized_performance_note_lengths, standardized_performance_rest_lengths, pitches)).T.tolist()
+    # print(all_info)
+    with open(os.path.join(args.output_dir, "note_info.json"), "w") as f:
+        json.dump(all_info, f)
+    # print("Rest lengths:", performance_rest_lengths)
+    # print("Scaled rest lengths:", scaled_rest_lengths)
         
-    all_score_note_length_info = get_score_note_lengths(args.score_path, args.score_part_number)
-    # score_note_lengths = all_score_note_length_info[0][args.score_part_number-1]
-    # score_note_or_rest = all_score_note_length_info[1][args.score_part_number-1]
-    print("Score note lengths:", all_score_note_length_info)
-    # print(all_score_note_length_info)
+    # all_score_note_length_info = get_score_note_lengths(args.score_path, args.score_part_number)
+    # print("Score note lengths:", all_score_note_length_info)
 
-    input()
-    # 
-    
+    # input() 
     
     
