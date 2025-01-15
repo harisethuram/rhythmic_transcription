@@ -4,7 +4,6 @@ from matplotlib.path import Path
 import os
 import math
 from scipy import stats
-from dtaidistance import dtw
 from tslearn.metrics import dtw_path
 
 
@@ -12,7 +11,7 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
     # Create a new figure
     # 1: 1, ratio between length of predictions and length of image
     l = min(len(prediction), 655)
-    print("figure size:", l, 4)
+    # print("figure size:", l, 4)
     # input()
     plt.figure(figsize=(l, 4))
     t = 1
@@ -24,40 +23,42 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
     custom_marker = Path(vertices, codes)
     
     # Plot the prediction onset times
-    plt.scatter(prediction, [0] * len(prediction), 
+    plt.scatter(prediction, [1] * len(prediction), 
                 marker=custom_marker, color='blue', s=400, label='Prediction')
 
     # Add labels above each prediction
-    for x, y, label in zip(prediction, [0] * len(prediction), raw_prediction_labels):
+    for x, y, label in zip(prediction, [1] * len(prediction), raw_prediction_labels):
         plt.text(x, y - 0.05, f'{label:.2f}', ha='center', fontsize=8, color='red')
     
-    for x, y, label in zip(prediction, [0] * len(prediction), prediction):
-        plt.text(x, y + 0.1, f'{int(label)}', ha='center', fontsize=9, color='blue')
+    for x, y, label in zip(prediction, [1] * len(prediction), prediction):
+        plt.text(x, y - 0.1, f'{int(label)}', ha='center', fontsize=9, color='blue')
     
     # Plot the ground truth onset times
+    print("gt len:", len(ground_truth))
+    print("pred len:", len(prediction))
     if ground_truth is not None:
-        plt.scatter(ground_truth, [1] * len(ground_truth), 
+        plt.scatter(ground_truth, [0] * len(ground_truth), 
                     marker=custom_marker, color='green', s=400, label='Ground Truth')
         
         # plot lines between prediction and ground truth using alignment
         if alignment is not None:
             for i, j in alignment:
-                plt.plot([prediction[i], ground_truth[j]], [0, 1], color='silver', linestyle='--', alpha=0.5)
+                plt.plot([ground_truth[i], prediction[j]], [0, 1], color='silver', linestyle='--', alpha=0.5)
         
-        for x, y, label in zip(ground_truth, [1] * len(ground_truth), ground_truth):
-            plt.text(x, y - 0.1, f'{label:.1f}', ha='center', fontsize=9, color='green')
-        for x, y, label in zip(ground_truth, [1] * len(ground_truth), raw_score_onset_lengths):
-            plt.text(x, y - 0.2, f'{label:.1f}', ha='center', fontsize=9, color='red')
+        for x, y, label in zip(ground_truth, [0] * len(ground_truth), ground_truth):
+            plt.text(x, y + 0.1, f'{label:.1f}', ha='center', fontsize=9, color='green')
+        for x, y, label in zip(ground_truth, [0] * len(ground_truth), raw_score_onset_lengths):
+            plt.text(x, y + 0.05, f'{label:.1f}', ha='center', fontsize=9, color='red')
     
     
 
     # Customize the plot
     if ground_truth is None:
-        plt.yticks([0], ['Prediction'])
+        plt.yticks([1], ['Prediction'])
         plt.title('Onset Times: Prediction with Labels')
         
     else:
-        plt.yticks([0, 1], ['Prediction', 'Ground Truth'])
+        plt.yticks([1, 0], ['Prediction', 'Ground Truth'])
         plt.title('Onset Times: Ground Truth vs Prediction with Labels')
     plt.xlabel('Onset Times')
     plt.legend()
@@ -82,9 +83,10 @@ def scale_onsets(onset_lengths, segments, alphas, verbose=False):
     return result, split_onset_lengths
 
 
-def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, num_samples=3):
+def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, dtw_func, num_samples=3):
     """
-    takes in performance_onset_lengthsiction and label (np arrays of shape (n)) and num samples to determine ratio, and returns average distance, and scaled label
+    takes in performance_onset_lengths and label (np arrays of shape (n)) and num samples to determine ratio, and returns average distance, and scaled label
+    also takes in a dtw function to generate alignment
     """
     ratios = []
     i = 0
@@ -107,9 +109,12 @@ def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, 
     performance_onset_times = np.array([0] + list(np.cumsum(performance_onset_lengths)))
     
 
-    alignment, _ = dtw_path(performance_onset_times, scaled_score_onset_times)
+    alignment, error = dtw_func(scaled_score_onset_lengths, performance_onset_lengths)
     
-    error = sum([(performance_onset_times[i] - scaled_score_onset_times[j])**2 for i, j in alignment])/len(scaled_score_onset_times)
+    error = {
+        "mean_onset_lengths_diff": error, 
+    }
+    
     return error, performance_onset_times, scaled_score_onset_times, scaled_score_onset_lengths, alignment
 
 def sin_loss(alpha, x, gamma=0, debug=False):

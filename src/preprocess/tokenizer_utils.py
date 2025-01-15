@@ -138,7 +138,7 @@ def serialize_json(obj, indent=4, current_indent=0):
     else:
         return json.dumps(obj)
 
-def tokenizer(want_barlines, no_expressions):
+def get_tokenizer_dicts(want_barlines, no_expressions):
     # note properties: duration, dotted, triplet, fermata, staccato, tied_forward, is_rest
     durations = [2**i for i in range(-4, 4)]
     properties = [False, True]
@@ -150,17 +150,18 @@ def tokenizer(want_barlines, no_expressions):
     # Add special tokens for padding and unknown tokens
     count = 0
     # pad token
-    token_to_id[get_tuple(-1)] = count
+    token_to_id["<PAD>"] = count
     count += 1
     
     # unknown token
-    token_to_id[get_tuple(-2)] = count
+    token_to_id["<UNK>"] = count
     count += 1
     
-    # barline
-    if want_barlines:    
-        token_to_id[get_tuple(0)] = count
-        count += 1
+    # start of sequence token
+    token_to_id["<SOS>"] = count
+    count += 1
+    
+    
     
     for duration in durations:
         for dotted in properties:
@@ -171,6 +172,11 @@ def tokenizer(want_barlines, no_expressions):
                             for is_rest in properties:
                                 token_to_id[get_tuple(duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)] = count
                                 count += 1
+    
+    # barline token
+    if want_barlines:
+        token_to_id["<BARLINE>"] = count
+        count += 1
     
     id_to_token = {v: k for k, v in token_to_id.items()}
     

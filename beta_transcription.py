@@ -114,6 +114,22 @@ if __name__ == "__main__":
         score_note_lengths = score_info[:,0]
         score_rest_lengths = score_info[:,1]
         
+        # adjust scales to ensure they're the same
+        
+        # ratios = []
+        # i = 0
+        
+        # while len(ratios) < 3:
+        #     if not (note_lengths[i] == 0 or note_lengths[i] == 0):
+        #         ratios.append(note_lengths[i]/score_note_lengths[i])
+        #     i += 1
+        
+        # # ratio is median of ratios
+        # ratio = np.median(ratios)
+        
+        # score_note_lengths = score_note_lengths * ratio
+        # score_rest_lengths = score_rest_lengths * ratio
+        
         note_alignment = dtw_path(note_lengths, score_note_lengths)[0]
         rest_alignment = dtw_path(rest_lengths, score_rest_lengths)[0]
         

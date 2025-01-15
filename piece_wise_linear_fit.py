@@ -7,9 +7,9 @@ import argparse
 import os
 import json
 
-
 from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets, get_score_note_lengths, get_performance_note_lengths, get_performance_pitches
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
+from src.eval.dtw import one_to_one_DTW, one_to_many_DTW, many_to_one_DTW, hybrid_DTW
 
 
 def find_optimal_alpha(onset_lengths, loss_fn, gamma=0, initial_alpha=3.0, upper_bound=20):
@@ -99,8 +99,7 @@ def piecewise_fit(onset_lengths, loss_fn, lbda, gamma, debug=False):
     seg_idx, seg_alphas = reconstruct_segment(segmentation, alphas)
     return seg_idx, seg_alphas
 
-
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--performance_path", type=str, help="File name of the performance onset times")
     parser.add_argument("--eval", action="store_true", help="Evaluate the model")
@@ -112,12 +111,24 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, help="Output directory")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument("--test_len", type=int, default=100000, help="Number of onsets to limit to for testing")
+    parser.add_argument("--dtw", type=str, default="one_to_one", help="DTW method to use, can be 'one_to_one' or 'one_to_many' or 'many_to_one'")
     
     args = parser.parse_args()
     print("Score info:", args.score_path, args.score_part_number)
     print("eval:", args.eval)
     
     print("Starting")
+    
+    name_to_dtw = {
+        "one_to_one": one_to_one_DTW,
+        "one_to_many": one_to_many_DTW,
+        "many_to_one": many_to_one_DTW,
+        "hybrid": hybrid_DTW
+    }
+    if args.dtw not in name_to_dtw.keys():
+        raise ValueError("Invalid DTW method")
+    
+    dtw_func = name_to_dtw[args.dtw]
     
     if args.loss_fn == "sin_loss":
         loss_fn = sin_loss
@@ -128,6 +139,8 @@ if __name__ == "__main__":
     
     performance_onsets = get_performance_onsets(args.performance_path)
     print("performance len:", len(performance_onsets))
+    if len(performance_onsets) > 400:
+        return
     
     raw_performance_onset_lengths = np.diff(performance_onsets)[:args.test_len]
         
@@ -145,14 +158,14 @@ if __name__ == "__main__":
         raw_score_onset_lengths = np.diff(raw_score_onsets)[:args.test_len]    
         print("score len:", len(raw_score_onsets))  
         
-        error, scaled_performance_onset_times, scaled_score_onset_times, scaled_score_onset_lengths, alignment = evaluate_onset_trascription(scaled_performance_onset_lengths, raw_score_onset_lengths)
+        error, scaled_performance_onset_times, scaled_score_onset_times, scaled_score_onset_lengths, alignment = evaluate_onset_trascription(scaled_performance_onset_lengths, raw_score_onset_lengths, dtw_func)
         
-        print("Error:", error)
+        print("Error:", error, len(scaled_performance_onset_times), len(scaled_score_onset_times))
         # plot only the first 20 onsets
         plot_onset_times(scaled_performance_onset_times, raw_performance_onset_lengths, scaled_score_onset_times, raw_score_onset_lengths, alignment, plt_path)
         
         with open(os.path.join(args.output_dir, "results.json"), "w") as f:
-            json.dump({"error": str(error), "prediction": scaled_performance_onset_times.tolist(), "ground_truth": scaled_score_onset_times.tolist()}, f)
+            json.dump({"error": error, "prediction": scaled_performance_onset_times.tolist(), "ground_truth": scaled_score_onset_times.tolist()}, f)
     
     # convert onsets to note and rest durations
     
@@ -164,25 +177,13 @@ if __name__ == "__main__":
     standardized_performance_rest_lengths = performance_rest_lengths / total_lengths
     
     pitches = get_performance_pitches(args.performance_path)[:-1]
-    # print("Pitches:", pitches)
-    
-    
-    # scale the note lengths
-    # scaled_note_lengths, _ = scale_onsets(performance_note_lengths, segments, alphas)
-    # scaled_rest_lengths = scaled_performance_onset_lengths - scaled_note_lengths[:-1]
-    # print("Scaled Onset lenghts:", scaled_performance_onset_lengths)
-    # print("Standardized Note lengths:", standardized_performance_note_lengths)
-    # print("Standardized note lengths:", standardized_performance_rest_lengths)
+
     all_info = np.vstack((scaled_performance_onset_lengths, standardized_performance_note_lengths, standardized_performance_rest_lengths, pitches)).T.tolist()
-    # print(all_info)
     with open(os.path.join(args.output_dir, "note_info.json"), "w") as f:
         json.dump(all_info, f)
-    # print("Rest lengths:", performance_rest_lengths)
-    # print("Scaled rest lengths:", scaled_rest_lengths)
-        
-    # all_score_note_length_info = get_score_note_lengths(args.score_path, args.score_part_number)
-    # print("Score note lengths:", all_score_note_length_info)
 
-    # input() 
+
+if __name__ == "__main__":
+    main()
     
     
