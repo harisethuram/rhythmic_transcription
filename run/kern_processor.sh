@@ -8,4 +8,6 @@
 python kern_processor.py \
     --input_dir "data/art-of-the-fugue/kern,data/bach-musical-offering/kern,data/bach-wtc-fugues/kern,data/inventions/kern" \
     --output_dir "processed_data/bach_fugues" \
-    --no_expressions \
+    # --want_barlines \
+    # --no_expressions \
+    # --debug 

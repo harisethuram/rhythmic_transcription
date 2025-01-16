@@ -8,10 +8,13 @@ from tqdm import tqdm
 import pickle as pkl
 import sys
 import random
+import matplotlib.pyplot as plt
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, serialize_json, get_tuple, tokenizer
-
+from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, get_tuple, get_base_tokenizer_dicts, tokenize
+from const_tokens import *
+from src.utils import serialize_json
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Converts a directory of kern files into a list of tokens.")
@@ -21,8 +24,12 @@ if __name__ == "__main__":
     parser.add_argument("--want_barlines", action="store_true", help="Whether or not to include barlines in the output.")
     parser.add_argument("--no_expressions", action="store_true", help="Whether or not to include expressions in the output.")
     parser.add_argument("--test_limit", type=int, default=100000, help="The number of files to process for testing")
+    parser.add_argument("--debug", action="store_true", help="Whether or not to print debug information.")
+    parser.add_argument("--unk_threshold", type=int, default=100, help="The frequency threshold below which a token is considered unknown.")
     args = parser.parse_args()
-
+    
+    random.seed(0)
+    print(args)
     # get the rhyths and expressions for every part for every file in the input directory
     print("Getting rhythms and expressions for all parts in all files...")
     all_rhythms_and_expressions = {}
@@ -37,38 +44,115 @@ if __name__ == "__main__":
                 all_rhythms_and_expressions[os.path.join(dataset, file)][i] = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions)
     
     # get all unique note tokens
-    note_tokens = []
+    unique_note_tokens = set()
     for all_parts in all_rhythms_and_expressions.values():
         for part in all_parts.values():
             for note in part:
-                note_tokens.append((note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"]))
-    unique_note_tokens = list(set(note_tokens))
+                unique_note_tokens.add(note)
     
-    token_to_id, id_to_token = tokenizer(args.want_barlines, args.no_expressions)
-    max_id = max(token_to_id.values())
-    print(token_to_id)
-    count = max_id + 1
+    token_to_id, id_to_token = get_base_tokenizer_dicts(args.want_barlines, args.no_expressions)
+    print("Base tokenizer dicts created.")
+    print(id_to_token)
+    
+    # train stats
+    
+    train_total_num_notes = 0
+    
+    train_frequencies = {}
+    train_unk_tokens = []
+    
     print("Number of unique note tokens:", len(token_to_id.keys()))
     
     print("Tokenizing rhythms and expressions...")
     split_names = ["train", "val"]
     all_rhythms_and_expressions_tokenized = {}
-    for piece_name, parts in all_rhythms_and_expressions.items():
+    
+    # assign splits to each piece and get frequencies for each token in train split and basically build the tokenizer
+    for piece_name, parts in all_rhythms_and_expressions.items(): # for each piece
+        if args.debug:
+            print(f"Piece: {piece_name}")
+            
         all_rhythms_and_expressions_tokenized[piece_name] = {}
-        for part, notes in parts.items():
-            rhythms_and_expressions_tokenized = []
-            for note in notes:
-                tup = get_tuple(note["duration"], note["dotted"], note["triplet"], note["fermata"], note["staccato"], note["tied_forward"], note["is_rest"])
-                if tup not in token_to_id.keys():
-                    print("Token not found in dictionary:", tup, "in piece", piece_name, "part", part)
-                    token_to_id[tup] = count
-                    id_to_token[count] = tup
-                    count += 1
-                rhythms_and_expressions_tokenized.append(token_to_id[tup])
-            all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
+        curr_split = split_names[int(random.random() > args.train_split)]
+        all_rhythms_and_expressions_tokenized[piece_name]["split"] = curr_split
         
-        all_rhythms_and_expressions_tokenized[piece_name]["split"] = split_names[int(random.random() > args.train_split)]
-    print("Number of unique note tokens after tokenization:", len(token_to_id.keys()))
+        if curr_split == "train":
+            for part, notes in parts.items():
+                if args.debug:
+                    print(f"Parsing part {part} of piece {piece_name}...")
+                    print(notes)
+                    input()
+
+                for note in notes:
+                    train_frequencies[note] = train_frequencies.get(note, 0) + 1
+                    
+    
+    # remove tokens with frequency below unk_threshold
+    filtered_train_frequencies = {k: v for k, v in train_frequencies.items() if v > args.unk_threshold}
+    
+    
+    print(f"Number of tokens with frequency below threshold ({args.unk_threshold}):", len(train_frequencies) - len(filtered_train_frequencies), "out of", len(train_frequencies))
+    filtered_train_frequencies[UNKNOWN_TOKEN] = sum([v for k, v in train_frequencies.items() if v <= args.unk_threshold])
+    
+    max_id = max(token_to_id.values())
+    count = max_id + 1
+    
+    for token in filtered_train_frequencies.keys():
+        if token not in token_to_id.keys():
+            token_to_id[token] = count
+            id_to_token[count] = token
+            count += 1
+    
+    # plot the frequencies of the tokens along with the threshold
+    freq_list = [(k, v) for k, v in train_frequencies.items()]
+    freq_list.sort(key=lambda x: x[1], reverse=True)
+    plt.plot([x[1] for x in freq_list], label="Note frequencies")
+    plt.axhline(args.unk_threshold, color="red", label="UNK Threshold")
+    plt.xlabel("Rank")
+    plt.ylabel("Frequency")
+    plt.title("Rank vs Train Frequency of Note Tokens")
+    plt.yscale("log")
+    plt.legend()
+    plt.savefig(os.path.join(args.output_dir, "note_train_frequencies_threshold.png"))    
+        
+    # now actually tokenize the rhythms and expressions
+    num_train_unks = 0
+    num_train_tokens = 0
+    
+    for piece_name, parts in all_rhythms_and_expressions.items(): # for each piece
+        if args.debug:
+            print(f"Piece: {piece_name}")
+        curr_split = all_rhythms_and_expressions_tokenized[piece_name]["split"]
+        for part, notes in parts.items():
+            if args.debug:
+                print(f"Parsing part {part} of piece {piece_name}...")
+                print(notes)
+                input()
+            rhythms_and_expressions_tokenized = []
+            if curr_split == "train":
+                num_train_tokens += len(notes)
+                
+            for note in notes:
+                if note in token_to_id.keys():
+                    rhythms_and_expressions_tokenized.append(token_to_id[note])
+                else:
+                    rhythms_and_expressions_tokenized.append(token_to_id[UNKNOWN_TOKEN])
+                    train_unk_tokens.append(note)
+                    if curr_split == "train":
+                        num_train_unks += 1
+                    
+            all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
+            
+                    
+                
+    assert len(token_to_id.keys()) == len(id_to_token.keys())
+    print(f"Number of token ids: {len(token_to_id.keys())}")
+    print("\nTrain set stats:")
+    print(f"Number of unknown tokens: {num_train_unks}/{num_train_tokens} ({num_train_unks/num_train_tokens*100:.2f}%)")
+    print(f"Median note frequency: {sorted(filtered_train_frequencies.values())[len(filtered_train_frequencies)//2]}")
+    print(f"Mean note frequency: {sum(filtered_train_frequencies.values())/len(token_to_id.keys())}")
+    print(f"Max note frequency: {max(filtered_train_frequencies.values())}")
+        
     # save the tokenized output and dictionaries as pickle files
     print("Writing tokenized output to file...")
     os.makedirs(args.output_dir, exist_ok=True)
@@ -80,3 +164,13 @@ if __name__ == "__main__":
         
     with open(os.path.join(args.output_dir, "id_to_token.pkl"), "wb") as f:
         pkl.dump(id_to_token, f)
+    
+    # also save id_to_token as json file
+    with open(os.path.join(args.output_dir, "id_to_token.json"), "w") as f:
+        f.write(serialize_json(id_to_token))
+        
+    # also save train_frequencies as json file
+    with open(os.path.join(args.output_dir, "train_frequencies.json"), "w") as f:
+        f.write(serialize_json(filtered_train_frequencies))
+    
+   

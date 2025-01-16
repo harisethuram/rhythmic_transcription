@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import music21
 from typing import List
+from const_tokens import *
 
 class Decoder(nn.Module):
     def __init__(self, model: nn.Module, beam_width: int=5, temperature: float=1.0):

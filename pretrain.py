@@ -14,13 +14,17 @@ def step(model, data, criterion, optimizer=None, val=False):
     data = data.to(device)
     targets = data[:, 1:]
     data = data[:, :-1]
+    
+    # print(targets.shape, data.shape)
+    # print()
 
     # Forward pass
     if not val:
         optimizer.zero_grad()
     outputs, _ = model(data)
-
-    loss = criterion(outputs, targets.reshape(-1))
+    # print(outputs.shape)
+    # input()
+    loss = criterion(outputs.reshape(-1, outputs.shape[-1]), targets.reshape(-1))
     if not val:
         loss.backward()
         optimizer.step()
@@ -101,15 +105,14 @@ if __name__ == "__main__":
         loss_vals[epoch+1] = {"train": running_train_loss, "val": running_val_loss}
         
         if running_val_loss < loss_vals["best_val_loss"]:
+            # print("New best model found at epoch", epoch+1)
             loss_vals["best_val_loss"] = running_val_loss
             loss_vals["best_val_epoch"] = epoch+1
-            torch.save(model.state_dict(), os.path.join(args.output_dir, "model.pth"))
+            torch.save(model, os.path.join(args.output_dir, "model.pth"))
             
-        pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))    
+        pbar.set_description("Avg Train Loss: {}, Avg Val Loss: {}".format(round(running_train_loss, 3), round(running_val_loss, 3)))
     
-    
-    # save the model
-    torch.save(model, os.path.join(args.output_dir, "model.pth"))
+
     # confirm that this is the best model
     model = torch.load(os.path.join(args.output_dir, "model.pth"))
     model.eval()
@@ -132,6 +135,7 @@ if __name__ == "__main__":
     plt.plot(range(len(val_losses)), val_losses, label="Val Loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
+    plt.title(f"Loss Plot, best val loss: {loss_vals['best_val_loss']:.4f} @ epoch {loss_vals['best_val_epoch']}")
     plt.legend()
     plt.savefig(os.path.join(args.output_dir, "loss_plot.png"))
     

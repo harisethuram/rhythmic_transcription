@@ -1,5 +1,8 @@
 import music21
 import json
+from typing import List, Dict
+
+from const_tokens import *
 
 def analyze_duration(dur):
         """
@@ -49,25 +52,22 @@ def analyze_duration(dur):
 
         return base_value, dot_value, is_dotted, is_triplet
 
-def get_rhythms_and_expressions(part, want_barlines=False, no_expressions=True):
-    current_measure = 0
+def get_rhythms_and_expressions(part, want_barlines=False, no_expressions=True) -> List:
+    """
+    Get the rhythms and expressions for a given part and 
+    """
+    # get first measure number
+    for element in part.flat.notesAndRests:
+        current_measure = element.measureNumber
+        break
 
     # Iterate through all elements in the part
 
-    rhythms_and_expressions = []
+    rhythms_and_expressions = [START_OF_SEQUENCE_TOKEN]
 
     for element in part.flat.notesAndRests:
         if current_measure != element.measureNumber and want_barlines:
-            rhythms_and_expressions.append({
-                "duration": 0,
-                "dotted": False,
-                "triplet": False,
-                "fermata": False,
-                "staccato": False,
-                "tied_forward": False,
-                "is_rest": False,
-                "pitch": -1
-            })
+            rhythms_and_expressions.append(BARLINE_TOKEN)
             current_measure = element.measureNumber
             
         duration = analyze_duration(element.duration)
@@ -110,35 +110,27 @@ def get_rhythms_and_expressions(part, want_barlines=False, no_expressions=True):
             curr_note["is_rest"] = True
         # print(curr_note)
         # input()
-        
-        rhythms_and_expressions.append(curr_note)
+        curr_note_tuple = get_tuple(
+            duration=curr_note["duration"],
+            dotted=curr_note["dotted"],
+            triplet=curr_note["triplet"],
+            fermata=curr_note["fermata"],
+            staccato=curr_note["staccato"],
+            tied_forward=curr_note["tied_forward"],
+            is_rest=curr_note["is_rest"]
+        )
+        rhythms_and_expressions.append(curr_note_tuple)
 
+    rhythms_and_expressions.append(END_OF_SEQUENCE_TOKEN)
+    # print(rhythms_and_expressions)
+    # input()
     return rhythms_and_expressions
 
 def get_tuple(duration, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False):
     return (duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)
 
-def serialize_json(obj, indent=4, current_indent=0):
-    """
-    Recursively serialize JSON object with indentation,
-    keeping lists on a single line.
-    """
-    spaces = ' ' * indent
-    current_spaces = ' ' * current_indent
-    if isinstance(obj, dict):
-        items = []
-        for key, value in obj.items():
-            serialized_value = serialize_json(value, indent, current_indent + indent)
-            items.append(f'{current_spaces}{spaces}"{key}": {serialized_value}')
-        return '{\n' + ',\n'.join(items) + f'\n{current_spaces}' + '}'
-    elif isinstance(obj, list):
-        # Serialize list on a single line
-        serialized_items = [json.dumps(item) for item in obj]
-        return '[' + ', '.join(serialized_items) + ']'
-    else:
-        return json.dumps(obj)
 
-def get_tokenizer_dicts(want_barlines, no_expressions):
+def get_base_tokenizer_dicts(want_barlines=False, no_expressions=True):
     # note properties: duration, dotted, triplet, fermata, staccato, tied_forward, is_rest
     durations = [2**i for i in range(-4, 4)]
     properties = [False, True]
@@ -150,34 +142,45 @@ def get_tokenizer_dicts(want_barlines, no_expressions):
     # Add special tokens for padding and unknown tokens
     count = 0
     # pad token
-    token_to_id["<PAD>"] = count
+    token_to_id[PADDING_TOKEN] = count
     count += 1
     
     # unknown token
-    token_to_id["<UNK>"] = count
+    token_to_id[UNKNOWN_TOKEN] = count
     count += 1
     
     # start of sequence token
-    token_to_id["<SOS>"] = count
+    token_to_id[START_OF_SEQUENCE_TOKEN] = count
     count += 1
     
-    
-    
-    for duration in durations:
-        for dotted in properties:
-            for triplet in properties:
-                for fermata in articulation_properties:
-                    for staccato in articulation_properties:
-                        for tied_forward in properties:
-                            for is_rest in properties:
-                                token_to_id[get_tuple(duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)] = count
-                                count += 1
+    # end of sequence token
+    token_to_id[END_OF_SEQUENCE_TOKEN] = count
+    count += 1
     
     # barline token
     if want_barlines:
-        token_to_id["<BARLINE>"] = count
+        token_to_id[BARLINE_TOKEN] = count
         count += 1
     
     id_to_token = {v: k for k, v in token_to_id.items()}
     
     return token_to_id, id_to_token
+
+def tokenize(notes: List, token_to_id: Dict) -> List:
+    """
+    Tokenizes the given notes using the given token_to_id dictionary.
+    
+    Parameters:
+    notes (list): List of notes to tokenize.
+    token_to_id (dict): Dictionary mapping tokens to their corresponding IDs.
+    
+    Returns:
+    list: List of tokenized notes.
+    """
+    tokenized_notes = []
+    for note in notes:
+        if note in token_to_id:
+            tokenized_notes.append(token_to_id[note])
+        else:
+            tokenized_notes.append(token_to_id[UNKNOWN_TOKEN])
+    return tokenized_notes
