@@ -82,7 +82,6 @@ def scale_onsets(onset_lengths, segments, alphas, verbose=False):
     
     return result, split_onset_lengths
 
-
 def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, dtw_func, num_samples=3):
     """
     takes in performance_onset_lengths and label (np arrays of shape (n)) and num samples to determine ratio, and returns average distance, and scaled label
