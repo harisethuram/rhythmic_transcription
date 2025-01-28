@@ -7,23 +7,21 @@ from tqdm import tqdm
 import json
 import matplotlib.pyplot as plt
 
+
 from src.model.RhythmLSTM import RhythmLSTM
 from src.preprocess.collate import preprocess_data
+from const_tokens import *
 
 def step(model, data, criterion, optimizer=None, val=False):
     data = data.to(device)
     targets = data[:, 1:]
     data = data[:, :-1]
-    
-    # print(targets.shape, data.shape)
-    # print()
 
     # Forward pass
     if not val:
         optimizer.zero_grad()
     outputs, _ = model(data)
-    # print(outputs.shape)
-    # input()
+    
     loss = criterion(outputs.reshape(-1, outputs.shape[-1]), targets.reshape(-1))
     if not val:
         loss.backward()
@@ -47,7 +45,7 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    pad_token_id = 0
+    
     torch.manual_seed(0)
     # Load the processed data
     print("Loading data...")
@@ -59,7 +57,7 @@ if __name__ == "__main__":
     model = RhythmLSTM(vocab_size, args.embed_size, args.hidden_size, args.num_layers).to(device)
     
     # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(ignore_index=token_to_id[PADDING_TOKEN])
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     
     # Training loop
@@ -105,7 +103,6 @@ if __name__ == "__main__":
         loss_vals[epoch+1] = {"train": running_train_loss, "val": running_val_loss}
         
         if running_val_loss < loss_vals["best_val_loss"]:
-            # print("New best model found at epoch", epoch+1)
             loss_vals["best_val_loss"] = running_val_loss
             loss_vals["best_val_epoch"] = epoch+1
             torch.save(model, os.path.join(args.output_dir, "model.pth"))

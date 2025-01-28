@@ -1,9 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import beta
 from scipy.optimize import fsolve
 
-def beta_params(mode, spread):
+def get_beta_params_from_mode_and_spread(mode, spread):
     """
     Find alpha and beta parameters for a Beta distribution given mode and spread.
     

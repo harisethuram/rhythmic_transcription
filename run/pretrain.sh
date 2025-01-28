@@ -1,3 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=pretrain
+#SBATCH --partition=gpu-titan
+#SBATCH --account=ark
+#SBATCH --nodes=1
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=hsethu@uw.edu
+#SBATCH --output=/mmfs1/gscratch/ark/hari/rhythmic_trascription/out/%j.out
+
+
 lrs=(1e-3 1e-4 1e-5)
 batch_sizes=(32 64 128)
 embed_sizes=(32 64 128)

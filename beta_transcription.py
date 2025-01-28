@@ -8,7 +8,7 @@ from fractions import Fraction
 from tslearn.metrics import dtw_path
 import matplotlib.pyplot as plt
 
-from src.model.model_utils import beta_params
+from src.model.model_utils import get_beta_params_from_mode_and_spread
 from src.preprocess.ingestion_utils import get_score_note_lengths
 
 if __name__ == "__main__":
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     alphas = []
     betas = []
     for mode in modes:
-        alpha, beta_param = beta_params(mode, s)
+        alpha, beta_param = get_beta_params_from_mode_and_spread(mode, s)
         alphas.append(alpha)
         betas.append(beta_param)
     

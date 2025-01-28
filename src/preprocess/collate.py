@@ -3,6 +3,7 @@ from torch.utils.data import DataLoader, Dataset
 import pickle as pkl
 import json
 import os
+from const_tokens import *
 
 class TokenizedDataset(Dataset):
     def __init__(self, data_dict):
@@ -35,13 +36,13 @@ def collate_fn(batch, pad_token_id, device="cuda"):
     
 def preprocess_data(data_path, batch_size, device="cuda") -> DataLoader:
     """
-    Preprocess the data, data_path is a dictionary where the keys are the names of the files and the values are the tokenized data. Assumes pad_token_id is 0.
+    Preprocess the data, data_path is a dictionary where the keys are the names of the files and the values are the tokenized data.
     """
     raw_data = json.load(open(os.path.join(data_path, "tokenized_dataset.json"), "r"))
     token_to_id = pkl.load(open(os.path.join(data_path, "token_to_id.pkl"), "rb"))
     id_to_token = pkl.load(open(os.path.join(data_path, "id_to_token.pkl"), "rb"))
     # dataset = TokenizedDataset(data)
-    pad_token_id = 0
+    pad_token_id = token_to_id[PADDING_TOKEN]
     
     train_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "train"})
     val_dataset = TokenizedDataset({piece_name: raw_data[piece_name] for piece_name in raw_data.keys() if raw_data[piece_name]["split"] == "val"})
