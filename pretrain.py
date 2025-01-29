@@ -63,6 +63,7 @@ if __name__ == "__main__":
     # Training loop
     print("Training model...")
     loss_vals = {"best_val_epoch": None, "best_val_loss": float("inf")}
+    model.eval()
     
     # initial loss: 
     with torch.no_grad():

@@ -1,6 +1,8 @@
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 from scipy.optimize import fsolve
+from scipy.stats import beta as beta_dist
 
 def get_beta_params_from_mode_and_spread(mode, spread):
     """
@@ -38,3 +40,6 @@ def get_beta_params_from_mode_and_spread(mode, spread):
     alpha, beta_param = solution
     
     return alpha, beta_param
+
+def beta_pdf(x, alpha, beta):
+    return torch.from_numpy(beta_dist.pdf(x, alpha, beta)).to(x.dtype).to(x.device)
