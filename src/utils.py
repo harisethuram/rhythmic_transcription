@@ -1,4 +1,7 @@
 import json
+from fractions import Fraction
+
+from const_tokens import *
 
 def serialize_json(obj, indent=4, current_indent=0):
     """
@@ -33,17 +36,49 @@ def get_token_attribute(token, attribute):
     return token[key[attribute]]
 
 def get_note_and_length_to_token_id_dicts(id_to_token):
+    def compute_length(note):
+        return Fraction(get_token_attribute(note, "note_length")) * (Fraction(3, 2) if get_token_attribute(note, "is_dotted") else 1) * (Fraction(2, 3) if get_token_attribute(note, "is_triplet") else 1)
+    
     note_length_to_token_ids = {}
     rest_length_to_token_ids = {}
     
     for token_id, token in id_to_token.items():
-        curr_len = get_token_attribute(token, "note_length") * (1.5 if get_token_attribute(token, "is_dotted") else 1) * (2/3 if get_token_attribute(token, "is_triplet") else 1)
+        if token in CONST_TOKENS:
+            continue
+        curr_len = compute_length(token)
         
         if get_token_attribute(token, "is_rest"):
             rest_length_to_token_ids[curr_len] = rest_length_to_token_ids.get(curr_len, []) + [token_id]
-        else:
+        elif not get_token_attribute(token, "is_tied_forward"):
             note_length_to_token_ids[curr_len] = note_length_to_token_ids.get(curr_len, []) + [token_id]
             
+    # now we need to consider the case of tied notes or multiple consecutive rests
+    # we'll only consider one tie or two consecutive rests
+    # just consider all pairs of (tied note, note) and (rest, rest)
+    
+    for token_id, token in id_to_token.items():
+        if token in CONST_TOKENS:
+            continue
+        if get_token_attribute(token, "is_tied_forward"):
+            note1_length = compute_length(token)
+            for token2_id, token2 in id_to_token.items():
+                # don't want second token to be constant, rest, or tied forward
+                if token2 in CONST_TOKENS or get_token_attribute(token2, "is_rest") or get_token_attribute(token2, "is_tied_forward"):
+                    continue
+                token2_length = compute_length(token2)
+                curr_len = note1_length + token2_length
+                note_length_to_token_ids[curr_len] = note_length_to_token_ids.get(curr_len, []) + [(token_id, token2_id)]
+                
+        elif get_token_attribute(token, "is_rest"):
+            rest1_length = compute_length(token)
+            for rest2_id, token2 in id_to_token.items():
+                if token2 in CONST_TOKENS or not get_token_attribute(token2, "is_rest"):
+                    continue
+                rest2_length = compute_length(token2)
+                curr_len = rest1_length + rest2_length
+                rest_length_to_token_ids[curr_len] = rest_length_to_token_ids.get(curr_len, []) + [(token_id, rest2_id)]
+                
+
     return note_length_to_token_ids, rest_length_to_token_ids
         
         

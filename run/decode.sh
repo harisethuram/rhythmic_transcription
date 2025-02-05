@@ -3,4 +3,4 @@ python decode.py \
     --channel_model_path "output/test_beta/beta_channel.pth" \
     --processed_data_dir "processed_data/bach_fugues" \
     --note_info_path "output/test_results/URMP/1_Jupiter_1/note_info.json" \
-    --decode_method "greedy" \
+    --decode_method "beam_search" \

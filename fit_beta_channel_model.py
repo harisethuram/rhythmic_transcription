@@ -12,8 +12,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, required=True, help="Dir to save the model")
     args = parser.parse_args()
     
-    modes = [float(Fraction(mode)) for mode in args.modes.split(",")]
-    spreads = [float(Fraction(spread)) for spread in args.spreads.split(",")]
+    modes = [Fraction(mode) for mode in args.modes.split(",")]
+    spreads = [Fraction(spread) for spread in args.spreads.split(",")]
     
     beta_channel = BetaChannel(modes, spreads)
     os.makedirs(args.output_dir, exist_ok=True)

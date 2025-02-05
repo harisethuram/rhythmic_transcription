@@ -9,14 +9,14 @@ from scipy.stats import beta as beta_dist
 from .model_utils import get_beta_params_from_mode_and_spread, beta_pdf
 
 class BetaChannel(nn.Module):
-    def __init__(self, modes: List[float], spreads: List[float]):
+    def __init__(self, modes: List, spreads: List):
         """
         params: list of tuples of (alpha, beta) for the beta distribution
         """
         super(BetaChannel, self).__init__()
         self.modes = modes
         self.spreads = spreads
-        self.params = [get_beta_params_from_mode_and_spread(mode, spread) for mode, spread in zip(modes, spreads)]
+        self.params = [get_beta_params_from_mode_and_spread(float(mode), float(spread)) for mode, spread in zip(modes, spreads)]
         # self.beta_dists = [Beta(alpha, beta) for alpha, beta in self.params]
         
     def forward(self, x):

@@ -8,6 +8,8 @@ from typing import List, Dict
 import pickle as pkl
 import os
 from tqdm import tqdm
+import numpy as np
+from fractions import Fraction
 
 from ..model.BetaChannel import BetaChannel
 from ..model.RhythmLSTM import RhythmLSTM
@@ -41,15 +43,157 @@ class Decoder(nn.Module):
             
     
     def _beam_search(self, note_info: List):
-        pass
+        def to_help(tensor):
+            return tensor.to(self.language_model.device).to(torch.int64)
+        
+        def to_tensor(obj):
+            x = to_help(torch.Tensor([obj]))
+            if len(x.shape) == 2:
+                x = x.squeeze()
+            return x
+        
+        note_lengths = [float(note[0]) for note in note_info]
+        note_portions = torch.Tensor([float(note[1]) for note in note_info])
+        
+        modes = np.array(self.beta_channel_model.modes)
+        note_lengths_as_fraction = np.expand_dims(np.vectorize(Fraction.from_float)(note_lengths), -1)
+        candidate_notes_lengths = note_lengths_as_fraction * np.expand_dims(modes, 0)
+        candidate_rests_lengths = note_lengths_as_fraction * np.expand_dims(1 - modes, 0)
+        all_beta_probs = self.beta_channel_model(note_portions) # all (num_notes, num_dists)
+        all_beta_probs = F.logsigmoid(all_beta_probs)
+        
+        note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
+        
+        # starts = to_help(torch.Tensor([[self.token_to_id[START_OF_SEQUENCE_TOKEN]]]))
+        
+        
+        
+        results = [[self.token_to_id[START_OF_SEQUENCE_TOKEN]] for _ in range(self.beam_width)]
+        
+        prefixes = [to_tensor(self.token_to_id[START_OF_SEQUENCE_TOKEN])]
+        beam_log_probs = [0.0] # log probabilities of each beam upto this point
+        
+        tmp1, (tmp2, tmp3) = self.language_model(prefixes[0])     
+        next_token_log_probs_all_beams = [F.log_softmax(tmp1, dim=-1)]
+        hidden_states = [tmp2]
+        cell_states = [tmp3]        
+        
+        # print("next token logits:", next_token_logits_all_beams.shape)
+        # print("hidden states:", hidden_states.shape)
+        # print(hidden_states)
+        # print("cell states:", cell_states.shape)
+        # print("num layers:", self.language_model.lstm.num_layers)
+        
+        self.language_model.eval()
+        
+        with torch.no_grad():
+            for i, (beta_probs, candidate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
+                candidates_all_beams = [[] for _ in range(len(prefixes))] 
+                # print("empty:", candidates_all_beams)
+                beta_log_probs = beta_probs
+                
+                # for each element of prefixes, we want to compute the probabilities of all candidates. 
+                # we want two arrays, first one consists of all the prefices of length beam_width, and the second consists of all tuples of (candidates, probability) for each prefix of shape (beam_width, num_candidates)
+                # then we select the top beam_width candidates from second array, and choose the corresponding prefices from the first array and do the concatenation
+                # sounds like a plan :)
+                
+                
+                for beam_no, (prefix, hidden_state, cell_state, next_token_log_probs) in enumerate(zip(prefixes, hidden_states, cell_states, next_token_log_probs_all_beams)):
+                    # print("beam_no:", beam_no)
+                    for beta_log_prob, candidate_note_length, candidate_rest_length in zip(beta_log_probs, candidate_note_lengths, candidate_rest_lengths):
+                        candidate_note_ids = note_length_to_id.get(candidate_note_length, [])
+                        candidate_rest_ids = rest_length_to_id.get(candidate_rest_length, []) 
+                        
+                        for candidate_note_id in candidate_note_ids:
+                            candidate_note_id = to_tensor(candidate_note_id)
+                            if len(candidate_note_id) == 1:
+                                note_prob = next_token_log_probs[..., -1, candidate_note_id]
+                            else: # in this case we have a tied note
+                                note1_prob = next_token_log_probs[..., -1, candidate_note_id[0]]
+                                note2_prob, _ = self.language_model(to_tensor(candidate_note_id[0]), hidden_state, cell_state)
+                                note2_prob = F.log_softmax(note2_prob, dim=-1)[..., -1, candidate_note_id[1]]
+                                note_prob = note1_prob + note2_prob
+                                
+                            rest_logits, (note_hidden_state, note_cell_state) = self.language_model(candidate_note_id, hidden_state, cell_state)
+                            rest_probs = F.log_softmax(rest_logits, dim=-1) 
+                            
+                            if candidate_rest_length == 0: # in this case there is only two choices: just the note, or the note followed by zero rest (this case is handled by the loop below)
+                                candidates_all_beams[beam_no].append((note_prob + beta_log_prob, candidate_note_id))
+                                
+                            
+                            for candidate_rest_id in candidate_rest_ids:        
+                                candidate_rest_id = to_tensor(candidate_rest_id)
+                                if len(candidate_rest_id) == 1:
+                                    rest_prob = rest_probs[..., -1, candidate_rest_id]
+                                else: # in this case we have two consecutive rests
+                                    rest1_prob = rest_probs[..., -1, candidate_rest_id[0]]
+                                    rest2_prob, _ = self.language_model(to_tensor(candidate_rest_id[0]), note_hidden_state)
+                                    rest2_prob = F.log_softmax(rest2_prob, dim=-1)[..., -1, candidate_rest_id[1]]
+                                    rest_prob = rest1_prob + rest2_prob
+                                
+                                next_prediction = torch.cat([candidate_note_id, candidate_rest_id], dim=-1)
+                                prob = note_prob + rest_prob + beta_log_prob
+                                
+                                candidates_all_beams[beam_no].append((prob, next_prediction))
+                                
+                # now we have all the candidates for all the beams, we need to select the top beam_width candidates for each beam
+                compiled_candidates = [] # list of tuples of (total_log_prob, beam_no, candidate)
+                # print(len(beam_log_probs), len(candidates_all_beams))
+                for beam_no, (beam_log_prob, candidates) in enumerate(zip(beam_log_probs, candidates_all_beams)):
+                    for curr_prob, candidate in candidates:
+                        # print("candidate:", candidate, curr_prob, beam_log_prob)
+                        # input()
+                        compiled_candidates.append((beam_log_prob + curr_prob, beam_no, candidate))
+                        
+                compiled_candidates = sorted(compiled_candidates, key=lambda x: x[0], reverse=True)
+                top_candidates = compiled_candidates[:self.beam_width]
+                
+                new_prefixes = []
+                new_beam_log_probs = []
+                new_next_token_log_probs_all_beams = []
+                new_hidden_states = []
+                new_cell_states = []
+                
+                for total_log_prob, beam_no, candidate in top_candidates:
+                    # print(beam_no)
+                    new_prefixes.append(torch.cat([prefixes[beam_no], candidate], dim=-1))
+                    new_beam_log_probs.append(total_log_prob)
+                    new_next_token_logits, (hidden_state, cell_state) = self.language_model(candidate, hidden_states[beam_no], cell_states[beam_no])
+                    new_next_token_log_probs_all_beams.append(F.log_softmax(new_next_token_logits, dim=-1))
+                    new_hidden_states.append(hidden_state)
+                    new_cell_states.append(cell_state)
+                    
+                prefixes = new_prefixes
+                beam_log_probs = new_beam_log_probs
+                next_token_log_probs_all_beams = new_next_token_log_probs_all_beams
+                hidden_states = new_hidden_states
+                cell_states = new_cell_states
+                
+                # print("top candidates:", top_candidates)
+                # print("new prefixes:", prefixes)
+                # input()
+        print()
+        # return the best beam
+        print("beam log probs:", beam_log_probs)
+        best_beam = np.argmax([i.item() for i in beam_log_probs])
+        ans = prefixes[best_beam].tolist()     
+        print(ans)
+        return ans
+        
+        
     
     def _greedy_decode(self, note_info: List):
         # with open(note_info_path, "r") as f:
         #     note_info = json.load(f)
-        start = torch.tensor([self.token_to_id[START_OF_SEQUENCE_TOKEN]])
-        start = output.to(self.language_model.device)
+        def to_tensor(obj):
+            x = torch.Tensor([obj]).to(self.language_model.device).to(torch.int64)
+            if len(x.shape) == 2:
+                x = x.squeeze()
+            return x
         
-        note_lengths = torch.Tensor([float(note[0]) for note in note_info])
+       
+        
+        note_lengths = [float(note[0]) for note in note_info]
         note_portions = torch.Tensor([float(note[1]) for note in note_info]) # (num_notes)
         
         
@@ -67,45 +211,130 @@ class Decoder(nn.Module):
         #         note that we don't multiply the rest_prob by beta_prob as that is just 1 as it follows, and because the beta_prob encompasses both note and rest.
         
         # get all the candidate note lengths
-        modes = torch.Tensor(self.beta_channel_model.modes)
-        
-        candidate_notes_lengths = note_lengths.unsqueeze(-1) * modes.unsqueeze(0)
-        candidate_rests_lengths = note_lengths.unsqueeze(-1) * (1 - modes).unsqueeze(0)
+        print("\n\n\n")
+        modes = np.array(self.beta_channel_model.modes)
+        print(modes)
+        note_lengths_as_fraction = np.expand_dims(np.vectorize(Fraction.from_float)(note_lengths), -1)
+        print("note_lengths as fraction:", note_lengths_as_fraction)
+        candidate_notes_lengths = note_lengths_as_fraction * np.expand_dims(modes, 0)
+        candidate_rests_lengths = note_lengths_as_fraction * np.expand_dims(1 - modes, 0)
         all_beta_probs = self.beta_channel_model(note_portions) # all (num_notes, num_dists)
+        # apply a log sigmoid to the beta probs to ensure they are between 0 and 1 in log space
+        all_beta_probs = F.logsigmoid(all_beta_probs)
+        
                 
         note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
-        hidden_state = None
-        result = []
+        # print(note_length_to_id)
+        # print(rest_length_to_id)
+        # input()
         
-        for i, (beta_probs, canditate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
-            next_token_logits, hidden_state = self.language_model(start, hidden_state)
-            next_token_probs = F.log_softmax(next_token_logits, dim=-1)
-            beta_log_probs = torch.log(beta_probs)
-            
-            all_candidates = []
-            
-            for beta_log_prob, candidate_note_length, candidate_rest_length in zip(beta_log_probs, canditate_note_lengths, candidate_rest_lengths):
-                candidate_note_ids = note_length_to_id.get(candidate_note_length.item(), [])
-                candidate_rest_ids = rest_length_to_id.get(candidate_rest_length.item(), [])
+        start = torch.tensor([self.token_to_id[START_OF_SEQUENCE_TOKEN]])
+        start = to_tensor(start)
+        
+        hidden_state = None
+        cell_state = None
+        result = [self.token_to_id[START_OF_SEQUENCE_TOKEN]]
+        next_token_logits, (hidden_state, cell_state) = self.language_model(start)
+        actual_lengths = note_lengths_as_fraction.squeeze().tolist()
+        
+        print("\n\n")
+        self.language_model.eval()
+        with torch.no_grad():
+            for i, (beta_probs, candidate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
+                # next_token_logits, (hidden_state, c) = self.language_model(start, hidden_state, c)
+                next_token_probs = F.log_softmax(next_token_logits, dim=-1)
+                beta_log_probs = beta_probs
+                # print(next_token_probs.shape, beta_log_probs.shape, candidate_note_lengths.shape, candidate_rest_lengths.shape)
+                # print("candidate note lengths:", candidate_note_lengths, candidate_rest_lengths)
+                # input()
                 
-                for candidate_note_id in candidate_note_ids:
-                    note_prob = next_token_probs[..., -1, candidate_note_id]
-                    rest_logits, _ = self.language_model(torch.Tensor([candidate_rest_length_id]).to(self.language_model.device), hidden_state)
-                    rest_probs = F.log_softmax(rest_logits, dim=-1)
-                    for candidate_rest_id in candidate_rest_ids:
-                        rest_prob = rest_probs[..., -1, candidate_rest_id]
-                        all_candidates.append((note_prob + rest_prob + beta_log_prob, candidate_note_id, candidate_rest_id))
+                all_candidates = []
+                
+                for beta_log_prob, candidate_note_length, candidate_rest_length in zip(beta_log_probs, candidate_note_lengths, candidate_rest_lengths):
+                    candidate_note_ids = note_length_to_id.get(candidate_note_length, [])
+                    candidate_rest_ids = rest_length_to_id.get(candidate_rest_length, [])
+                    
+                    # print("candidate lengths:", candidate_note_ids, candidate_rest_length)
+                    
+                    
+                    for candidate_note_id in candidate_note_ids:
+                        # print("candidate note id raw:", candidate_note_id, to_tensor(candidate_note_id))
+                        candidate_note_id = to_tensor(candidate_note_id)
+                        if len(candidate_note_id) == 1:
+                            note_prob = next_token_probs[..., -1, candidate_note_id]
+                        else: # in this case we have a tied note
+                            note1_prob = next_token_probs[..., -1, candidate_note_id[0]]
+                            note2_prob, _ = self.language_model(to_tensor(candidate_note_id[0]), hidden_state, cell_state)
+                            note2_prob = F.log_softmax(note2_prob, dim=-1)[..., -1, candidate_note_id[1]]
+                            note_prob = note1_prob + note2_prob
+                            
+                            
                         
-            tmp = all_candidates[max(enumerate(all_candidates), key=lambda x: x[1][0])]
-            next_note = tmp[1]
-            next_rest = tmp[2]
-            
-            start = torch.Tensor([next_note, next_rest]).to(self.language_model.device)
-            _, hidden_state = self.language_model(start, hidden_state)
-            result.append(next_note)
-            if next_rest is not None:
-                result.append(next_rest)
+                        # if len(candidate_note_id.shape) == 2:
+                        #     candidate_note_id = candidate_note_id.squeeze()
+                            
+                        # print("candidate note id tensor:", candidate_note_id)
+                        rest_logits, (note_hidden_state, note_cell_state) = self.language_model(candidate_note_id, hidden_state, cell_state)
+                        rest_probs = F.log_softmax(rest_logits, dim=-1) 
+                        
+                        if candidate_rest_length == 0: # in this case there is only two choices: just the note, or the note followed by zero rest (this case is handled by the loop below)
+                            # print(note_prob, beta_log_prob, candidate_note_id)
+                            all_candidates.append((note_prob + beta_log_prob, candidate_note_id))
+                            
+                        
+                        for candidate_rest_id in candidate_rest_ids:
+                            
+                            # input()
+                            candidate_rest_id = to_tensor(candidate_rest_id)
+                            # if len(candidate_rest_id.shape) == 2:
+                            #     candidate_rest_id = candidate_rest_id.squeeze()
+                            # print(candidate_note_id, candidate_rest_id)    
+                            if len(candidate_rest_id) == 1:
+                                rest_prob = rest_probs[..., -1, candidate_rest_id]
+                            else: # in this case we have two consecutive rests
+                                rest1_prob = rest_probs[..., -1, candidate_rest_id[0]]
+                                # print("candidate rest:", candidate_rest_id, to_tensor(candidate_rest_id[0]))
+                                rest2_prob, _ = self.language_model(to_tensor(candidate_rest_id[0]), note_hidden_state)
+                                rest2_prob = F.log_softmax(rest2_prob, dim=-1)[..., -1, candidate_rest_id[1]]
+                                rest_prob = rest1_prob + rest2_prob
+                            
+                            next_prediction = torch.cat([candidate_note_id, candidate_rest_id], dim=-1)
+                            prob = note_prob + rest_prob + beta_log_prob
+                            # if prob > 0:
+                            #     print("prob:", prob, note_prob, rest_prob, beta_log_prob)
+                            #     print("candidate note id:", candidate_note_id)
+                            #     print("candidate rest id:", candidate_rest_id)
+                            # print("next prob:", (prob, next_prediction))
+                            # input()
+                            all_candidates.append((prob, next_prediction))
+                            
+
+                # print(all_candidates)
+                # for candidate in all_candidates:
+                #     print(candidate, len(candidate))
                 
+                # tmp = all_candidates[max(enumerate(all_candidates), key=lambda x: x[1][0])]
+                best_next = None
+                best_prob = float("-inf")
+                for candidate in all_candidates:
+                    if candidate[0] > best_prob:
+                        best_next = candidate[1]
+                        best_prob = candidate[0]
+                # print("best next:", best_next, best_prob)        
+                
+                # start = torch.Tensor([next_note, next_rest]).to(self.language_model.device)
+                
+                next_token_logits, (hidden_state, cell_state) = self.language_model(best_next, hidden_state, cell_state)
+                start = best_next[-1]
+                result += best_next.tolist()
+                # print("result:", result)
+                # print("actual lenghths:", note_lengths_as_fraction[:i+1].tolist())
+                # input()
+                # _, hidden_state = self.language_model(start, hidden_state)
+                # result.append(next_note)
+                # if next_rest is not None:
+                #     result.append(next_rest)
+        print("result:", result)        
         return result
             
             
