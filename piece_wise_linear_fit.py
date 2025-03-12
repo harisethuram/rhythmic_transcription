@@ -114,8 +114,7 @@ def main():
     parser.add_argument("--dtw", type=str, default="one_to_one", help="DTW method to use, can be 'one_to_one' or 'one_to_many' or 'many_to_one'")
     
     args = parser.parse_args()
-    print("Score info:", args.score_path, args.score_part_number)
-    print("eval:", args.eval)
+    print(args)
     
     print("Starting")
     
@@ -166,6 +165,10 @@ def main():
         
         with open(os.path.join(args.output_dir, "results.json"), "w") as f:
             json.dump({"error": error, "prediction": scaled_performance_onset_times.tolist(), "ground_truth": scaled_score_onset_times.tolist()}, f)
+            
+        # save the alignment too
+        with open(os.path.join(args.output_dir, "alignment.json"), "w") as f:
+            json.dump(alignment, f)
     
     # convert onsets to note and rest durations
     
@@ -179,9 +182,10 @@ def main():
     pitches = get_performance_pitches(args.performance_path)[:-1]
 
     all_info = np.vstack((scaled_performance_onset_lengths, standardized_performance_note_lengths, standardized_performance_rest_lengths, pitches)).T.tolist()
+    
     with open(os.path.join(args.output_dir, "note_info.json"), "w") as f:
         json.dump(all_info, f)
-
+    print("Finished, saved at", os.path.join(args.output_dir, "note_info.json"))
 
 if __name__ == "__main__":
     main()

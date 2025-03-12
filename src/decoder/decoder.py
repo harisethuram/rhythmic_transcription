@@ -13,11 +13,12 @@ from fractions import Fraction
 
 from ..model.BetaChannel import BetaChannel
 from ..model.RhythmLSTM import RhythmLSTM
-from ..utils import get_note_and_length_to_token_id_dicts
+from ..utils import get_note_and_length_to_token_id_dicts, decompose_note_sequence
+from ..note.Note import Note
 from const_tokens import *
 
 class Decoder(nn.Module):
-    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0):
+    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0, base_value: float=1.0):
         super(Decoder, self).__init__()
         self.language_model = language_model
         self.beta_channel_model = beta_channel_model
@@ -25,24 +26,34 @@ class Decoder(nn.Module):
         self.id_to_token = id_to_token
         self.beam_width = beam_width
         self.temperature = temperature
-        
-        # with open(os.path.join(processed_data_dir, "id_to_token.pkl"), "rb") as f:
-        #     self.id_to_token = pkl.load(f)
-        # with open(os.path.join(processed_data_dir, "token_to_id.pkl"), "rb") as f:
-        #     self.token_to_id = pkl.load(f)
+        self.base_value = Fraction.from_float(base_value)
 
-    def decode(self, note_info: List, decode_method: str="greedy") -> List[int]:
+    def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, debug: bool=False) -> List[int]: # TODO: implement flatten feature
+        """
+        Decodes the given note info using the specified decoding method.
+        note_info: List of length 3 (or 4) arrays: [quantized_length, note_portion, rest_portion, pitch (optional)]
+        decode_method: Decoding method to use, one of ['greedy', 'beam_search']
+        flatten: If False, returns a list of lists, where each sublist corresponds to an onset. If True, returns a flat list of tokens.
+        """
         if decode_method == "greedy":
-            return self._greedy_decode(note_info)
-        elif decode_method == "sample":
-            return self._sample_decode(note_info)
+            out = self._greedy_decode(note_info, debug=debug)
         elif decode_method == "beam_search":
-            return self._beam_search(note_info)
+            out = self._beam_search(note_info, debug=debug)
+        else:
+            raise ValueError(f"Invalid decode method: {decode_method}, must be one of ['greedy', 'beam_search']") 
         
-        raise ValueError(f"Invalid decode method: {decode_method}, must be one of ['greedy', 'sample', 'beam_search']") 
+        if flatten:
+            return out
+        # out = [22, 19, 4, 4, 14, 16, 19, 35, 19, 19, 35, 35] # for testing
+        result, detokenized_result = decompose_note_sequence(out, self.token_to_id, self.id_to_token)
+        print("result:", result, len(result))
+        if debug:
+            print("Flat:", out)
+            print("Not Flat:", result)
+            input()
+        return result, detokenized_result
             
-    
-    def _beam_search(self, note_info: List):
+    def _beam_search(self, note_info: List, debug=False):
         def to_help(tensor):
             return tensor.to(self.language_model.device).to(torch.int64)
         
@@ -56,7 +67,9 @@ class Decoder(nn.Module):
         note_portions = torch.Tensor([float(note[1]) for note in note_info])
         
         modes = np.array(self.beta_channel_model.modes)
-        note_lengths_as_fraction = np.expand_dims(np.vectorize(Fraction.from_float)(note_lengths), -1)
+        note_lengths_as_fraction = np.expand_dims(np.vectorize(Fraction.from_float)(note_lengths), -1) / self.base_value
+        # print("notelength", note_lengths_as_fraction)
+        # print("basevalue", note_lengths_as_fraction / self.base_value)
         candidate_notes_lengths = note_lengths_as_fraction * np.expand_dims(modes, 0)
         candidate_rests_lengths = note_lengths_as_fraction * np.expand_dims(1 - modes, 0)
         all_beta_probs = self.beta_channel_model(note_portions) # all (num_notes, num_dists)
@@ -83,6 +96,7 @@ class Decoder(nn.Module):
         # print(hidden_states)
         # print("cell states:", cell_states.shape)
         # print("num layers:", self.language_model.lstm.num_layers)
+        print("all_beta_probs:", len(all_beta_probs))
         
         self.language_model.eval()
         
@@ -91,7 +105,8 @@ class Decoder(nn.Module):
                 candidates_all_beams = [[] for _ in range(len(prefixes))] 
                 # print("empty:", candidates_all_beams)
                 beta_log_probs = beta_probs
-                
+                # print(beam_log_probs)
+                # input()
                 # for each element of prefixes, we want to compute the probabilities of all candidates. 
                 # we want two arrays, first one consists of all the prefices of length beam_width, and the second consists of all tuples of (candidates, probability) for each prefix of shape (beam_width, num_candidates)
                 # then we select the top beam_width candidates from second array, and choose the corresponding prefices from the first array and do the concatenation
@@ -172,13 +187,14 @@ class Decoder(nn.Module):
                 # print("top candidates:", top_candidates)
                 # print("new prefixes:", prefixes)
                 # input()
-        print()
+        # print()
         # return the best beam
-        print("beam log probs:", beam_log_probs)
+        # print("beam log probs:", beam_log_probs)
         best_beam = np.argmax([i.item() for i in beam_log_probs])
-        ans = prefixes[best_beam].tolist()     
-        print(ans)
+        ans = prefixes[best_beam].tolist()
+        print("ans:", ans, len(ans))
         return ans
+    
         
         
     
@@ -211,11 +227,11 @@ class Decoder(nn.Module):
         #         note that we don't multiply the rest_prob by beta_prob as that is just 1 as it follows, and because the beta_prob encompasses both note and rest.
         
         # get all the candidate note lengths
-        print("\n\n\n")
+        # print("\n\n\n")
         modes = np.array(self.beta_channel_model.modes)
-        print(modes)
+        # print(modes)
         note_lengths_as_fraction = np.expand_dims(np.vectorize(Fraction.from_float)(note_lengths), -1)
-        print("note_lengths as fraction:", note_lengths_as_fraction)
+        # print("note_lengths as fraction:", note_lengths_as_fraction)
         candidate_notes_lengths = note_lengths_as_fraction * np.expand_dims(modes, 0)
         candidate_rests_lengths = note_lengths_as_fraction * np.expand_dims(1 - modes, 0)
         all_beta_probs = self.beta_channel_model(note_portions) # all (num_notes, num_dists)
@@ -224,9 +240,6 @@ class Decoder(nn.Module):
         
                 
         note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
-        # print(note_length_to_id)
-        # print(rest_length_to_id)
-        # input()
         
         start = torch.tensor([self.token_to_id[START_OF_SEQUENCE_TOKEN]])
         start = to_tensor(start)
@@ -237,7 +250,7 @@ class Decoder(nn.Module):
         next_token_logits, (hidden_state, cell_state) = self.language_model(start)
         actual_lengths = note_lengths_as_fraction.squeeze().tolist()
         
-        print("\n\n")
+        # print("\n\n")
         self.language_model.eval()
         with torch.no_grad():
             for i, (beta_probs, candidate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
@@ -334,12 +347,25 @@ class Decoder(nn.Module):
                 # result.append(next_note)
                 # if next_rest is not None:
                 #     result.append(next_rest)
-        print("result:", result)        
+        # print("result:", result)        
         return result
-            
-            
         
     def _sample_decode(self, note_info: List):
-        pass
+        raise NotImplementedError("Sampling not yet implemented")
     
-    
+
+if __name__ == "__main__":
+    result = [[[], []] for _ in range(len(note_info))]
+    j = 0
+    # out = [Note()]
+    # for i in range(len(out)):
+    #     if out[i] == self.token_to_id[START_OF_SEQUENCE_TOKEN]:
+    #         continue
+    #     # increment j if its a new onset: i is a note and i-1 is a rest, edge case: i > 1 as you have sos at start
+    #     if not self.id_to_token[out[i]].is_rest and self.id_to_token[out[i-1]].is_rest and i > 1:
+    #         j += 1 
+    #     if not self.id_to_token[out[i]].is_rest:
+    #         result[j][0].append(out[i])
+    #     else:
+    #         result[j][1].append(out[i])
+    # return result

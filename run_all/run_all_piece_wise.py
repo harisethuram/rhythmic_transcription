@@ -7,7 +7,7 @@ from statistics import median
 if __name__ == "__main__":
     data = pd.read_csv("metadata/URMP/metadata.csv")
     errors = {}
-    root_result_dir = "test_results/URMP_hybrid/"
+    root_result_dir = "debug_results/"
     
     test_lim = 10000
     for i, row in data.iterrows():
@@ -22,6 +22,7 @@ if __name__ == "__main__":
                 errors[curr_dir] = {"mean_onset_lengths_diff": results_json["mean_onset_lengths_diff"]}
             except FileNotFoundError:
                 print(f"Error in {curr_dir}, not found")
+        break
             
     errors["total"] = {
         "avg_mean_onset_lengths_diff": sum([m["mean_onset_lengths_diff"] for m in errors.values()])/len(errors.values()),

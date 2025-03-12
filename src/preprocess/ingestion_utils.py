@@ -17,6 +17,7 @@ def get_score_note_lengths(midi_file_path, part_number, want_last=False):
     
     note_lengths = np.array([element.duration.quarterLength for element in score.parts[part_number-1].flat.notesAndRests])
     is_note = np.array([isinstance(element, note.Note) for element in score.parts[part_number-1].flat.notesAndRests])
+    print([(note_length, is_note_i) for note_length, is_note_i in zip(note_lengths, is_note)])
     starting_rest = 0
     
     if not is_note[0]:
@@ -38,7 +39,7 @@ def get_score_note_lengths(midi_file_path, part_number, want_last=False):
             i += 1
     if want_last:
         result.append((note_lengths[-1], 0))
-
+        
     return np.array(result), starting_rest
 
 def get_performance_onsets(input_path):
@@ -86,9 +87,11 @@ def freq_to_note(frequencies):
     note_names = [note_name.replace("♭", "b") for note_name in note_names]
     return note_names
 
+
+
 # Example usage:
 if __name__ == "__main__":
     # result = analyze_duration(3/4)  # Example: 1.5 quarter notes (a dotted quarter note)
     # print(result)  # Expected output: (1.0, 0.5, True, False)
-    # print(get_onset_times("Dataset/05_Entertainer_tpt_tpt/Sco_05_Entertainer_tpt_tpt.mid"))
-    print(get_performance_onsets("Dataset/06_Entertainer_sax_sax/Notes_1_sax_06_Entertainer.txt"))
+    get_score_note_lengths("data/URMP/val/01_Jupiter_vn_vc/Sco_01_Jupiter_vn_vc.mid", 2, True)
+    # print(get_performance_onsets("Dataset/06_Entertainer_sax_sax/Notes_1_sax_06_Entertainer.txt"))

@@ -31,7 +31,10 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
         plt.text(x, y - 0.05, f'{label:.2f}', ha='center', fontsize=8, color='red')
     
     for x, y, label in zip(prediction, [1] * len(prediction), prediction):
-        plt.text(x, y - 0.1, f'{int(label)}', ha='center', fontsize=9, color='blue')
+        plt.text(x, y - 0.1, f'{label:.1f}', ha='center', fontsize=9, color='black')
+        
+    for i, x in enumerate(prediction):
+        plt.text(x, 0.85, f'{i}', ha='center', fontsize=9, color='blue')
     
     # Plot the ground truth onset times
     print("gt len:", len(ground_truth))
@@ -46,9 +49,12 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
                 plt.plot([ground_truth[i], prediction[j]], [0, 1], color='silver', linestyle='--', alpha=0.5)
         
         for x, y, label in zip(ground_truth, [0] * len(ground_truth), ground_truth):
-            plt.text(x, y + 0.1, f'{label:.1f}', ha='center', fontsize=9, color='green')
+            plt.text(x, y + 0.1, f'{label:.1f}', ha='center', fontsize=9, color='black')
         for x, y, label in zip(ground_truth, [0] * len(ground_truth), raw_score_onset_lengths):
             plt.text(x, y + 0.05, f'{label:.1f}', ha='center', fontsize=9, color='red')
+        # print the index for each onset
+        for i, x in enumerate(ground_truth):
+            plt.text(x, 0.15, f'{i}', ha='center', fontsize=9, color='green')
     
     
 
@@ -110,14 +116,26 @@ def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, 
 
     alignment, error = dtw_func(scaled_score_onset_lengths, performance_onset_lengths)
     
+    # manually compute squared diff error using alignment
+    # squared_diff_error = 0
+        
+        
+    
     error = {
-        "mean_onset_lengths_diff": error, 
+        "alignment_error": error, 
     }
     
     return error, performance_onset_times, scaled_score_onset_times, scaled_score_onset_lengths, alignment
 
-def sin_loss(alpha, x, gamma=0, debug=False):
+def regularization(x, gamma=1, l=2):
     """
+    x: np array of shape (n)
+    """
+    return gamma * sum(x ** l)
+
+def sin_loss(alpha, x, gamma=0, eta=1, debug=False):
+    """
+    sin loss with asymptote at 0
     x: np array of shape (n)
     """
     x = x.copy() * alpha[0]
@@ -125,7 +143,8 @@ def sin_loss(alpha, x, gamma=0, debug=False):
         print("scaled:", x)
     
     lesser_than_one = x < 1
-    x[lesser_than_one] = ((1/(x+1e-6))[lesser_than_one] - 1) ** 2
+    x[lesser_than_one] = (((1 / (x + 1e-6))[lesser_than_one] - 1) ** 2) * eta
+    # x[lesser_than_one] = inv(x[lesser_than_one])
     if debug:
         print("less than one:", x)
     x[np.invert(lesser_than_one)] = np.sin(np.pi * x[np.invert(lesser_than_one)]) ** 2
@@ -135,6 +154,31 @@ def sin_loss(alpha, x, gamma=0, debug=False):
     if debug:
         print("val:", val, gamma)
     return val
+
+# def sin_loss_asymp_0_5(alpha, x, gamma=0, eta=1, debug=False):
+#     """
+#     sin loss with asymptote at 0.5
+#     x: np array of shape (n)
+#     """
+#     def inv(y):
+#         return (y - 1) ** 2 / (y - 0.5)
+    
+#     x = x.copy() * alpha[0]
+#     if debug:
+#         print("scaled:", x)
+        
+#     lesser_than_one = x < 1
+#     x[lesser_than_one] = inv(x[lesser_than_one]) * eta
+    
+#     if debug:
+#         print("less than one:", x)
+#     x[np.invert(lesser_than_one)] = np.sin(np.pi * x[np.invert(lesser_than_one)]) ** 2 
+    
+#     if debug:
+#         print("greater than one:", x)
+        
+#     val = x.mean() + gamma * np.abs(alpha)
+    
 
 def round_loss(alpha, x, gamma=0, debug=False):
     """

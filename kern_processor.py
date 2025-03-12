@@ -21,27 +21,54 @@ if __name__ == "__main__":
     parser.add_argument("--input_dirs", type=str, help="Comma-separated list of directories containing kern files.")
     parser.add_argument("--output_dir", type=str, help="The file to write the tokenized output to.")
     parser.add_argument("--train_split", type=float, default=0.9, help="The proportion of the data to use for training.")
-    parser.add_argument("--want_barlines", action="store_true", help="Whether or not to include barlines in the output.")
-    parser.add_argument("--no_expressions", action="store_true", help="Whether or not to include expressions in the output.")
+    parser.add_argument("--want_barlines", action="store_true", help="Include barlines in the output.")
+    parser.add_argument("--no_expressions", action="store_true", help="Don't include expressions in the output.")
     parser.add_argument("--test_limit", type=int, default=100000, help="The number of files to process for testing")
     parser.add_argument("--debug", action="store_true", help="Whether or not to print debug information.")
     parser.add_argument("--unk_threshold", type=int, default=100, help="The frequency threshold below which a token is considered unknown.")
     args = parser.parse_args()
     
     random.seed(0)
+    os.makedirs(args.output_dir, exist_ok=True)
     print(args)
     # get the rhyths and expressions for every part for every file in the input directory
     print("Getting rhythms and expressions for all parts in all files...")
     all_rhythms_and_expressions = {}
+    total_num_parts = 0
+    num_useful_parts = 0
+    num_corrupt_files = 0
+    total_num_files = 0
     for dataset in args.input_dirs.split(","):
+        print("Processing", dataset)
         for file in tqdm(os.listdir(dataset)):
+            
             if file.split(".")[-1] != "krn":
                 continue
-            
-            parts = converter.parse(os.path.join(dataset, file)).parts
+            total_num_files += 1
+            try:
+                parts = converter.parse(os.path.join(dataset, file)).parts
+            except Exception as e:
+                # print(f"Error in file {os.path.join(dataset, file)}: {e}")
+                num_corrupt_files += 1
+                continue
             all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
             for i, part in enumerate(parts):
-                all_rhythms_and_expressions[os.path.join(dataset, file)][i] = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions)
+                tmp = None
+                # try:
+                tmp = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions)
+                # except Exception as e:
+                # tmp=None
+                # print(f"Error in file {os.path.join(dataset, file)} part {i}: {e}")
+                if tmp is not None:
+                    all_rhythms_and_expressions[os.path.join(dataset, file)][i] = tmp
+                    num_useful_parts += 1
+                # else:
+                #     print(f"Skipping file {os.path.join(dataset, file)} part {i}")
+                total_num_parts += 1
+    print(f"Number of useful parts: {num_useful_parts}/{total_num_parts} ({num_useful_parts/total_num_parts*100:.2f}%)")
+    print(f"Number of corrupted files: {num_corrupt_files}/{total_num_files} ({num_corrupt_files/total_num_files*100:.2f}%)")
+    # remove all files with no useful parts
+    # get_rhythms_and_expressions = {k: v for k, v in all_rhythms_and_expressions.items() if len(v) > 0}
     
     # get all unique note tokens
     unique_note_tokens = set()
@@ -99,10 +126,17 @@ if __name__ == "__main__":
     
     for token in filtered_train_frequencies.keys():
         if token not in token_to_id.keys():
+            # token_to_id[token] = count
             token_to_id[token] = count
             id_to_token[count] = token
             count += 1
-    
+            
+    if args.debug:
+        print("token_to_id:")
+        print(token_to_id)
+        print("id_to_token:")
+        print(id_to_token)
+        input()
     # plot the frequencies of the tokens along with the threshold
     freq_list = [(k, v) for k, v in train_frequencies.items()]
     freq_list.sort(key=lambda x: x[1], reverse=True)
@@ -133,6 +167,7 @@ if __name__ == "__main__":
                 num_train_tokens += len(notes)
                 
             for note in notes:
+                # note = str(note)
                 if note in token_to_id.keys():
                     rhythms_and_expressions_tokenized.append(token_to_id[note])
                 else:
@@ -143,7 +178,7 @@ if __name__ == "__main__":
                     
             all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
             
-                    
+    all_rhythms_and_expressions_tokenized = {k: v for k, v in all_rhythms_and_expressions_tokenized.items() if len(v) > 1}                
                 
     assert len(token_to_id.keys()) == len(id_to_token.keys())
     print(f"Number of token ids: {len(token_to_id.keys())}")
@@ -155,7 +190,7 @@ if __name__ == "__main__":
         
     # save the tokenized output and dictionaries as pickle files
     print("Writing tokenized output to file...")
-    os.makedirs(args.output_dir, exist_ok=True)
+    
     with open(os.path.join(args.output_dir, "tokenized_dataset.json"), "w") as f:
         f.write(serialize_json(all_rhythms_and_expressions_tokenized))
         
@@ -167,10 +202,26 @@ if __name__ == "__main__":
     
     # also save id_to_token as json file
     with open(os.path.join(args.output_dir, "id_to_token.json"), "w") as f:
-        f.write(serialize_json(id_to_token))
+        id_to_token_str = {k: str(v) for k, v in id_to_token.items()}
+        f.write(serialize_json(id_to_token_str))
+        
+    with open(os.path.join(args.output_dir, "token_to_id.json"), "w") as f:
+        # first convert the token_to_id dict to a dict with string keys
+        token_to_id_str = {str(k): v for k, v in token_to_id.items()}
+        f.write(serialize_json(token_to_id_str))
         
     # also save train_frequencies as json file
     with open(os.path.join(args.output_dir, "train_frequencies.json"), "w") as f:
         f.write(serialize_json(filtered_train_frequencies))
     
+    metadata = {
+        "num_train_unks": num_train_unks,
+        "num_train_tokens": num_train_tokens,
+        "want_barlines": args.want_barlines,
+        "no_expressions": args.no_expressions,
+        "train_split": args.train_split,
+        "unk_threshold": args.unk_threshold,
+    }
    
+    with open(os.path.join(args.output_dir, "metadata.json"), "w") as f:
+        f.write(serialize_json(metadata))

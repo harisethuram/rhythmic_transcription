@@ -128,6 +128,8 @@ def hybrid_DTW(seq_1, seq_2):
     alignment = []
     i = len(seq_1)
     j = len(seq_2)
+    print("cost:", D[-1, -1])
+    print(D)
     
     # everything is done in reference to seq_1 as that's the ground truth
     # return None
@@ -164,6 +166,14 @@ def hybrid_DTW(seq_1, seq_2):
 
 
 if __name__ == "__main__":
-    seq_1 = np.array([0.5, 0.5, 2, 1, 7])
-    seq_2 = np.array([1, 1, 1, 1, 1, 4])
+    # seq_1 = np.array([0.5, 0.5, 2, 1, 7])
+    # seq_2 = np.array([1, 1, 1, 1, 3, 4])
+    # seq_1 = np.array([2, 2, 2,   # sums to 6
+    #     3, 5, 2,   # sums to 10
+    #     3, 3,      # sums to 6
+    #     2, 2, 5,   # sums to 9
+    #     1, 3])
+    # seq_2 = np.array([6, 10, 6, 9, 4])
+    seq_1 = np.array([1, 1, 3, 2, 1, 4, 4, 5, 1, 1, 2, 2, 1])
+    seq_2 = np.array([2, 3, 3, 4, 4, 7, 4, 2])
     hybrid_DTW(seq_1, seq_2)

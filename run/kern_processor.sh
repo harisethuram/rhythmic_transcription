@@ -5,9 +5,20 @@
     # --want_barlines \
     # 
 
+# python kern_processor.py \
+#     --input_dir "data/unaligned/beethoven/beethoven-string-quartets/kern" \
+#     --output_dir "test/processed_data2/chopin" \
+#     --want_barlines \
+#     --no_expressions \
+    # --debug 
+
 python kern_processor.py \
-    --input_dir "data/art-of-the-fugue/kern,data/bach-musical-offering/kern,data/bach-wtc-fugues/kern,data/inventions/kern" \
-    --output_dir "processed_data/bach_fugues" \
+    --input_dir "data/unaligned/beethoven/beethoven-string-quartets/kern,data/unaligned/vivaldi/vivaldi/op01/kern,data/unaligned/vivaldi/vivaldi/op02/kern,data/unaligned/beethoven/beethoven-string-quartets/kern,data/unaligned/bach/fugues/art-of-the-fugue/kern,data/unaligned/bach/fugues/bach-musical-offering/kern,data/unaligned/bach/fugues/bach-wtc-fugues/kern,data/unaligned/bach/fugues/inventions/kern,data/unaligned/bach/chorales/bach-370-chorales/kern,data/unaligned/chopin/humdrum-chopin-first-editions/kern,data/unaligned/vocals_only/vocals_only" \
+    --output_dir "processed_data/all/" \
     # --want_barlines \
     # --no_expressions \
     # --debug 
+
+# python kern_processor.py \
+#     --input_dir "data/unaligned/vocals_only/vocals_only" \
+#     --output_dir test/processed_data2/vocals_only \
