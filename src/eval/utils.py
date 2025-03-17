@@ -102,7 +102,7 @@ def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, 
     
     # ratio is median of ratios
     ratio = np.median(ratios)
-    print(ratio)
+    # print(ratio)
     if ratio == 0 or ratio is None:
         print("Ratio is 0 or None")
         raise ValueError("Ratio is 0 or None")

@@ -9,9 +9,10 @@ import pickle as pkl
 import json
 import warnings
 from tqdm import tqdm
+import sys
 
 from src.decoder.decoder import Decoder
-from src.utils import serialize_json, decompose_note_sequence
+from src.utils import serialize_json, decompose_note_sequence, convert_alignment
 from src.note.Note import Note
 from const_tokens import *
 
@@ -77,16 +78,19 @@ if __name__ == "__main__":
         with open(args.score_path, "r") as f:
             score_token_ids = json.load(f)[str(args.score_part_id)]
         score_token_ids = [int(x) for x in score_token_ids]
-        print("score ids:", score_token_ids)
+        # print("score ids:", score_token_ids)
         _, score_notes = decompose_note_sequence(score_token_ids, token_to_id, id_to_token)
         
         with open(args.alignment_path, "r") as f:
             alignment = json.load(f)
-            
-        alignment_dict = {}
-        for score_index, performance_index in alignment:
-            alignment_dict[performance_index] = alignment_dict.get(performance_index, []) + [score_index]
-        
+        if alignment[-1][1] >= len(detokenized_output):
+            print("error: alignment length is greater than detokenized output length, must be missing some notes")
+            sys.exit(1)
+        # alignment_dict = {}
+        # for score_index, performance_index in alignment:
+        #     alignment_dict[performance_index] = alignment_dict.get(performance_index, []) + [score_index]
+        alignment_dict = convert_alignment(alignment)
+        # print(alignment_dict)
         results = {}
         
         correct = []
@@ -100,8 +104,12 @@ if __name__ == "__main__":
             # print(detokenized_output[perf[0]])
             # print(score_notes[score])
             # print(score, )
-            curr_score_notes = score_notes[score][0]
-            curr_score_rests = score_notes[score][1]
+            curr_score_notes = []
+            curr_score_rests = []
+            for score_index in score:
+                curr_score_notes += score_notes[score_index][0]
+                curr_score_rests += score_notes[score_index][1]
+                
             curr_perf_notes = []
             curr_perf_rests = []
             for perf_index in perf:
@@ -112,13 +120,14 @@ if __name__ == "__main__":
             # print("notes:", curr_perf_notes)   
             # print("rests:", curr_perf_rests)
             # print("type:", type(curr_perf_notes[0]))
-            # input()
+            
             # binary correct?
             if curr_score_notes == curr_perf_notes and curr_score_rests == curr_perf_rests:
                 correct.append(1)
             else:
                 correct.append(0)
-                
+            # print(correct[-1])  
+            # input()
             # length squared error
             curr_score_note_length = sum([note.get_len() for note in curr_score_notes])
             curr_perf_note_length = sum([note.get_len() for note in curr_perf_notes])
@@ -134,14 +143,14 @@ if __name__ == "__main__":
                 correct_given_length_se_0.append(None)
         
         # aggregate results
-        results["total_binary_accuracy"] = sum(correct) / total
-        results["total_length_se"] = sum(length_se) / total
-        results["total_correct_given_length_se_0"] = sum([x for x in correct_given_length_se_0 if x is not None]) / sum([1 for x in correct_given_length_se_0 if x is not None])
+        results["total_binary_accuracy"] = float(float(sum(correct)) / float(total))
+        results["total_length_se"] = float(float(sum(length_se)) / float(total))
+        results["total_correct_given_length_se_0"] = float(float(sum([x for x in correct_given_length_se_0 if x is not None])) / float(sum([1 for x in correct_given_length_se_0 if x is not None]) + 1e-6))
         
         results["binary_correct"] = correct
         results["length_se"] = length_se
         results["correct_given_length_se_0"] = correct_given_length_se_0
         
-            
+        print(results)
         with open(os.path.join(args.output_dir, "results.json"), "w") as f:
             f.write(serialize_json(results))

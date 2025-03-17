@@ -84,7 +84,7 @@ def get_note_and_length_to_token_id_dicts(id_to_token):
 
     return note_length_to_token_ids, rest_length_to_token_ids
         
-def convert_note_tuple_list_to_music_xml(note_tuple_list: List, output_dir, pitches=None):
+def convert_note_tuple_list_to_music_xml(note_tuple_list: List, output_dir, pitches=None): # TODO
     """
     Convert a list of note tuples to a MusicXML file for visualization
     If pitches is not passed, default to middle C for all notes
@@ -153,6 +153,98 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
             result[j][1].append(note_sequence[i])
             detokenized_result[j][1].append(id_to_token[note_sequence[i]])
     return result, detokenized_result
+
+def convert_alignment(alignment):
+    """
+    alignment is a list of (i1, i2) pairs,
+      where i1 is an index in sequence 1,
+            i2 is an index in sequence 2.
+    We return a dictionary such that:
+      - if i1 maps to multiple i2's (one-to-many), store final_dict[i1] = (i2_1, i2_2, ...)
+      - if multiple i1's map to the same i2 (many-to-one), store final_dict[(i1_1, i1_2, ...)] = i2
+      - otherwise normal one-to-one: final_dict[i1] = i2
+    Order is preserved based on the order in which i1 first appears in `alignment`.
+    """
+
+    # 1) Build forward and backward maps to gather alignments
+    from collections import OrderedDict
+
+    forward_map = OrderedDict()  # i1 -> list of i2
+    backward_map = {}            # i2 -> list of i1
+
+    for i1, i2 in alignment:
+        # Forward map: preserve the order of i1 as it first appears
+        if i1 not in forward_map:
+            forward_map[i1] = []
+        forward_map[i1].append(i2)
+
+        # Backward map: just collect i1 in a list
+        if i2 not in backward_map:
+            backward_map[i2] = []
+        backward_map[i2].append(i1)
+
+    # 2) Build the final dictionary, preserving order of i1 as in forward_map
+    used_i1 = set()
+    used_i2 = set()
+    final_dict = OrderedDict()
+
+    # Helper to keep track of the order in which i1's first appeared
+    i1_in_order = list(forward_map.keys())
+
+    for i1 in i1_in_order:
+        # Skip if this i1 has already been used in a many-to-one
+        if i1 in used_i1:
+            continue
+
+        i2_list = forward_map[i1]
+
+        # --- One-to-many case ---
+        if len(i2_list) > 1:
+            # i1 maps to multiple i2
+            # => final_dict[i1] = tuple of i2s
+            final_dict[tuple([i1])] = tuple(i2_list)
+
+            # Mark i1, and all the i2s, as used so we don't re-map them
+            used_i1.add(i1)
+            for x in i2_list:
+                used_i2.add(x)
+
+        else:
+            # There's exactly one i2 for this i1
+            i2_single = i2_list[0]
+
+            # If that i2 is already used, skip or ignore (depends on your data assumptions).
+            if i2_single in used_i2:
+                continue
+
+            # Check how many i1's map to this i2
+            i1_list_for_that_i2 = backward_map[i2_single]
+
+            # Filter out any i1 that's already used
+            i1_list_for_that_i2 = [x for x in i1_list_for_that_i2 if x not in used_i1]
+
+            # --- Many-to-one case ---
+            if len(i1_list_for_that_i2) > 1:
+                # multiple i1's map to the same i2 => key should be a tuple of those i1's, value is i2
+                # but preserve the order in which these i1's appeared in the alignment
+                i1_positions = {v: idx for idx, v in enumerate(i1_in_order)}
+                i1_list_for_that_i2.sort(key=lambda x: i1_positions[x])  # stable sort by appearance
+                key = tuple(i1_list_for_that_i2)
+                final_dict[key] = tuple([i2_single])
+
+                # Mark them all used
+                for x in i1_list_for_that_i2:
+                    used_i1.add(x)
+                used_i2.add(i2_single)
+
+            else:
+                # --- Normal one-to-one ---
+                final_dict[tuple([i1])] = tuple([i2_single])
+                used_i1.add(i1)
+                used_i2.add(i2_single)
+
+    return final_dict
+
 if __name__ == "__main__":
     tmp = [(1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False), (1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False)]
     output_dir = "test/"

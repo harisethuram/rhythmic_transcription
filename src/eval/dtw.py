@@ -18,7 +18,7 @@ def one_to_many_DTW(seq_1, seq_2):
     if len(seq_1) > len(seq_2):
         seq_1 = seq_1[:len(seq_2)]
     D = np.zeros((len(seq_1)+1, len(seq_2)+1))
-    print(len(seq_1), len(seq_2))
+    # print(len(seq_1), len(seq_2))
     
     # initialize the first row and column
     D[0, 1:] = np.inf
@@ -47,7 +47,7 @@ def one_to_many_DTW(seq_1, seq_2):
         i -= 1
         j = k - 1
     
-    print(alignment)
+    # print(alignment)
     return np.array(alignment).tolist(), D[-1, -1]
 
 
@@ -128,8 +128,8 @@ def hybrid_DTW(seq_1, seq_2):
     alignment = []
     i = len(seq_1)
     j = len(seq_2)
-    print("cost:", D[-1, -1])
-    print(D)
+    # print("cost:", D[-1, -1])
+    # print(D)
     
     # everything is done in reference to seq_1 as that's the ground truth
     # return None
@@ -160,7 +160,7 @@ def hybrid_DTW(seq_1, seq_2):
             j = l    
             i -= 1
     
-    print(alignment)
+    # print(alignment)
     return alignment, D[-1, -1]
           
 

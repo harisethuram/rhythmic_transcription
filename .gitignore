@@ -17,3 +17,9 @@ out/
 output/
 misc/
 debug_results/
+# all pycache
+__pycache__/
+# all pycache
+*.pyc
+# all pycache
+*.pyo
