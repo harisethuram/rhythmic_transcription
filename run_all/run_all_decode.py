@@ -13,7 +13,7 @@ if __name__ == "__main__":
     methods = ["beam_search"]
     test_lim = 10000
     base_note_info_dir = "debug_results/"
-    processed_data_dir = "processed_data/URMP/validation/"
+    processed_data_dir = "processed_data/URMP_test_all/validation/"
     all_results = {}
     default_high = 10000
     for i, row in data.iterrows():
@@ -34,9 +34,9 @@ if __name__ == "__main__":
                 output_dir = os.path.join(root_result_dir, curr_dir, f"base_value_{str(base_value)}")
                 score_path = os.path.join(processed_data_dir, f"{row['piece_id']}_{row['piece_name']}.json")
                 part_id = str(row["part_id"])
-                if os.path.exists(os.path.join(output_dir, "results.json")):
-                    print("skipping")
-                    continue
+                # if os.path.exists(os.path.join(output_dir, "results.json")):
+                #     print("skipping")
+                #     continue
                 alignment_path = os.path.join(base_note_info_dir, curr_dir, "alignment.json")
                 subprocess.call(["bash", "run/decode.sh", note_info_path, output_dir, str(base_value), score_path, part_id, alignment_path])
                     

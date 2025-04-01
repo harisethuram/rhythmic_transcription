@@ -18,7 +18,7 @@ from ..note.Note import Note
 from const_tokens import *
 
 class Decoder(nn.Module):
-    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0, base_value: float=1.0):
+    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0, base_value: float=1.0, unk_score=-1000):
         super(Decoder, self).__init__()
         self.language_model = language_model
         self.beta_channel_model = beta_channel_model
@@ -27,8 +27,9 @@ class Decoder(nn.Module):
         self.beam_width = beam_width
         self.temperature = temperature
         self.base_value = Fraction.from_float(base_value)
+        self.unk_score = unk_score
 
-    def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, debug: bool=False) -> List[int]: # TODO: implement flatten feature
+    def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, debug: bool=False) -> List[int]: # TODO: make sure to output detokenized also in case of flattened
         """
         Decodes the given note info using the specified decoding method.
         note_info: List of length 3 (or 4) arrays: [quantized_length, note_portion, rest_portion, pitch (optional)]
@@ -118,6 +119,10 @@ class Decoder(nn.Module):
                     for beta_log_prob, candidate_note_length, candidate_rest_length in zip(beta_log_probs, candidate_note_lengths, candidate_rest_lengths):
                         candidate_note_ids = note_length_to_id.get(candidate_note_length, [])
                         candidate_rest_ids = rest_length_to_id.get(candidate_rest_length, []) 
+                        # if candidate note ids is empty, or candidate rest ids is empty and candidate rest length is not 0, then we can't proceed so we append an unk token
+                        if len(candidate_note_ids) == 0 or (len(candidate_rest_ids) == 0 and candidate_rest_length != 0):
+                            candidates_all_beams[beam_no].append((self.unk_score, to_tensor(self.token_to_id[UNKNOWN_TOKEN])))
+                            continue
                         
                         for candidate_note_id in candidate_note_ids:
                             candidate_note_id = to_tensor(candidate_note_id)

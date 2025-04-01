@@ -11,7 +11,7 @@ class Note:
             string = [clean(s) for s in string]
             if len(string) != 7:
                 raise ValueError(f"Invalid string: {string}")
-            self.duration = float(string[0])
+            self.duration = Fraction(string[0])
             self.dotted = string[1] == "True"
             self.triplet = string[2] == "True"
             self.fermata = string[3] == "True"
@@ -20,14 +20,14 @@ class Note:
             self.is_rest = string[6] == "True"
         elif tple is not None:
             self.duration = tple[0]
-            self.dotted = tple[1]
+            self.dotted = Fraction(tple[1])
             self.triplet = tple[2]
             self.fermata = tple[3]
             self.staccato = tple[4]
             self.tied_forward = tple[5]
             self.is_rest = tple[6]
         else:
-            self.duration = duration
+            self.duration = Fraction(duration)
             self.dotted = dotted
             self.triplet = triplet
             self.fermata = fermata

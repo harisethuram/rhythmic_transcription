@@ -7,7 +7,7 @@ import argparse
 import os
 import json
 
-from src.preprocess.ingestion_utils import get_performance_onsets, get_score_onsets, get_score_note_lengths, get_performance_note_lengths, get_performance_pitches
+from src.preprocess.ingestion_utils import get_performance_onsets, midi_to_onsets, get_score_note_lengths, get_performance_note_lengths, get_performance_pitches
 from src.eval.utils import sin_loss, round_loss, evaluate_onset_trascription, plot_onset_times, scale_onsets
 from src.eval.dtw import one_to_one_DTW, one_to_many_DTW, many_to_one_DTW, hybrid_DTW
 
@@ -153,7 +153,7 @@ def main():
     # evaluation
     if args.eval:
         
-        raw_score_onsets = get_score_onsets(args.score_path)[args.score_part_number-1]
+        raw_score_onsets = midi_to_onsets(args.score_path)[args.score_part_number-1]
         raw_score_onset_lengths = np.diff(raw_score_onsets)[:args.test_len]    
         print("score len:", len(raw_score_onsets))  
         

@@ -35,9 +35,12 @@ if __name__ == "__main__":
     print("Getting rhythms and expressions for all parts in all files...")
     all_rhythms_and_expressions = {}
     total_num_parts = 0
-    num_useful_parts = 0
+    num_useless_parts = 0
+    
     num_corrupt_files = 0
     total_num_files = 0
+    num_corrupt_parts = 0
+    # total_num_parts = 0
     for dataset in args.input_dirs.split(","):
         print("Processing", dataset)
         for file in tqdm(os.listdir(dataset)):
@@ -52,25 +55,50 @@ if __name__ == "__main__":
                 num_corrupt_files += 1
                 continue
             all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
+            print("path:", os.path.join(dataset, file))
+            part_counter = 0
             for i, part in enumerate(parts):
-                tmp = None
-                # try:
-                tmp = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions)
+                corrupted = False
+                try:
+                    tmp_parts = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions) # a list of lists of notes
+                except Exception as e:
+                    tmp_parts = []
+                    print(f"Error in file {os.path.join(dataset, file)} part {i}: {e}")
+                    corrupted = True
+                    num_corrupt_parts += 1
+                    
+                for tmp_part in tmp_parts:
+                    all_rhythms_and_expressions[os.path.join(dataset, file)][part_counter] = tmp_part
+                    part_counter += 1
                 # except Exception as e:
                 # tmp=None
                 # print(f"Error in file {os.path.join(dataset, file)} part {i}: {e}")
-                if tmp is not None:
-                    all_rhythms_and_expressions[os.path.join(dataset, file)][i] = tmp
-                    num_useful_parts += 1
+                if len(tmp_parts) == 0 and not corrupted:
+                    num_useless_parts += 1
                 # else:
                 #     print(f"Skipping file {os.path.join(dataset, file)} part {i}")
                 total_num_parts += 1
-    print(f"Number of useful parts: {num_useful_parts}/{total_num_parts} ({num_useful_parts/total_num_parts*100:.2f}%)")
+                # print(tmp_parts)
+                # for r in tmp_parts:
+                #     print("*************************")
+                #     start = r[:20]
+                #     end = r[-20:]
+                #     for j in start:
+                #         print(j)
+                #     print("...")
+                #     for j in end:
+                #         print(j)
+                print(f"num spliced parts for {os.path.join(dataset, file)}:", len(tmp_parts))
+                
+                # input()
+    print(f"Number of useless parts: {num_useless_parts}/{total_num_parts} ({num_useless_parts/total_num_parts*100:.2f}%)")
+    print(f"Number of corrupt parts: {num_corrupt_parts}/{total_num_parts} ({num_corrupt_parts/total_num_parts*100:.2f}%)")
     print(f"Number of corrupted files: {num_corrupt_files}/{total_num_files} ({num_corrupt_files/total_num_files*100:.2f}%)")
     # remove all files with no useful parts
     # get_rhythms_and_expressions = {k: v for k, v in all_rhythms_and_expressions.items() if len(v) > 0}
     
     # get all unique note tokens
+    
     unique_note_tokens = set()
     for all_parts in all_rhythms_and_expressions.values():
         for part in all_parts.values():

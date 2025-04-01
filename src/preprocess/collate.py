@@ -3,6 +3,8 @@ from torch.utils.data import DataLoader, Dataset
 import pickle as pkl
 import json
 import os
+import numpy as np
+
 from const_tokens import *
 
 class TokenizedDataset(Dataset):
@@ -12,7 +14,7 @@ class TokenizedDataset(Dataset):
             data_dict (dict): Dictionary with file names as keys and tokenized data as values.
         """
         self.part_id = [(piece_name, part) for piece_name in data_dict.keys() for part in data_dict[piece_name].keys() if part != "split"]
-        self.tokenized_data = [torch.tensor(data_dict[piece_name][part], dtype=torch.long) for piece_name, part in self.part_id]
+        self.tokenized_data = [torch.tensor(np.array(data_dict[piece_name][part], dtype=int), dtype=torch.long) for piece_name, part in self.part_id]
 
     def __len__(self):
         return len(self.part_id)

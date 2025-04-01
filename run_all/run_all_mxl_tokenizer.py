@@ -6,7 +6,7 @@ import json
 if __name__ == "__main__":
     data = pd.read_csv("metadata/URMP/metadata.csv")
     errors = {}
-    root_result_dir = "processed_data/URMP/validation"
+    root_result_dir = "processed_data/URMP_test_all/validation"
     
     test_lim = 10000
     visited = set()
@@ -18,5 +18,5 @@ if __name__ == "__main__":
         if row["split"] == "val":
             curr_path = f"{row['piece_id']}_{row['piece_name']}.json"
             subprocess.call(["bash", "run/mxl_tokenizer.sh", row["score_path"], os.path.join(root_result_dir, curr_path)])
-        
+        # input()
         visited.add(row["piece_id"])

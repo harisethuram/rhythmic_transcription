@@ -7,7 +7,7 @@ from scipy import stats
 from tslearn.metrics import dtw_path
 
 
-def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_score_onset_lengths=None, alignment=None, save_path=None):
+def plot_onset_times(prediction, raw_prediction_labels=None, ground_truth=None, raw_score_onset_lengths=None, alignment=None, save_path=None):
     # Create a new figure
     # 1: 1, ratio between length of predictions and length of image
     l = min(len(prediction), 655)
@@ -27,8 +27,9 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
                 marker=custom_marker, color='blue', s=400, label='Prediction')
 
     # Add labels above each prediction
-    for x, y, label in zip(prediction, [1] * len(prediction), raw_prediction_labels):
-        plt.text(x, y - 0.05, f'{label:.2f}', ha='center', fontsize=8, color='red')
+    if raw_prediction_labels is not None:
+        for x, y, label in zip(prediction, [1] * len(prediction), raw_prediction_labels):
+            plt.text(x, y - 0.05, f'{label:.2f}', ha='center', fontsize=8, color='red')
     
     for x, y, label in zip(prediction, [1] * len(prediction), prediction):
         plt.text(x, y - 0.1, f'{label:.1f}', ha='center', fontsize=9, color='black')
@@ -50,8 +51,9 @@ def plot_onset_times(prediction, raw_prediction_labels, ground_truth=None, raw_s
         
         for x, y, label in zip(ground_truth, [0] * len(ground_truth), ground_truth):
             plt.text(x, y + 0.1, f'{label:.1f}', ha='center', fontsize=9, color='black')
-        for x, y, label in zip(ground_truth, [0] * len(ground_truth), raw_score_onset_lengths):
-            plt.text(x, y + 0.05, f'{label:.1f}', ha='center', fontsize=9, color='red')
+        if raw_score_onset_lengths is not None:
+            for x, y, label in zip(ground_truth, [0] * len(ground_truth), raw_score_onset_lengths):
+                plt.text(x, y + 0.05, f'{label:.1f}', ha='center', fontsize=9, color='red')
         # print the index for each onset
         for i, x in enumerate(ground_truth):
             plt.text(x, 0.15, f'{i}', ha='center', fontsize=9, color='green')
@@ -118,8 +120,6 @@ def evaluate_onset_trascription(performance_onset_lengths, score_onset_lengths, 
     
     # manually compute squared diff error using alignment
     # squared_diff_error = 0
-        
-        
     
     error = {
         "alignment_error": error, 

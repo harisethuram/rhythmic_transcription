@@ -3,7 +3,7 @@ import numpy as np
 from librosa import hz_to_note
 
 
-def get_score_onsets(midi_file_path):
+def midi_to_onsets(midi_file_path):
     """
     takes in a midi file path and returns a list of numpy arrays, each containing the onset times of the notes in a part
     """

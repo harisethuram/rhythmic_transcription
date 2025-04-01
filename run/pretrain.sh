@@ -22,12 +22,12 @@ for lr in "${lrs[@]}"; do
             for hidden_size in "${hidden_sizes[@]}"; do
                 echo "Running pretrain with lr=$lr, batch_size=$batch_size, embed_size=$embed_size, hidden_size=$hidden_size"
                 python pretrain.py \
-                    --processed_data_dir "processed_data/all"\
-                    --output_dir "models/tmp/all" \
+                    --processed_data_dir "processed_data/test_all"\
+                    --output_dir "models/tmp/test_all" \
                     --embed_size $embed_size \
                     --hidden_size $hidden_size \
                     --num_layers 2 \
-                    --num_epochs 1000 \
+                    --num_epochs 200 \
                     --batch_size $batch_size \
                     --learning_rate $lr 
             done

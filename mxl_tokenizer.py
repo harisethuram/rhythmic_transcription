@@ -17,19 +17,19 @@ if __name__ == "__main__":
     parser.add_argument("--output_path", type=str, help="The path to a json file to write the tokenized output to.")
     parser.add_argument("--processed_data_dir", type=str, help="Directory containing the processed data. Has tokenized data, token_to_id, and id_to_token")
     args = parser.parse_args()
-    
+    print(args)
     random.seed(0)
     # print(args)
     output_dir = "/".join(args.output_path.split("/")[:-1])
     output_file = args.output_path.split("/")[-1]
-    print("input_path: ", args.input_path, "output_path: ", args.output_path, "processed_data_dir: ", args.processed_data_dir)
+    # print("input_path: ", args.input_path, "output_path: ", args.output_path, "processed_data_dir: ", args.processed_data_dir)
     
     assert output_file.split(".")[-1] == "json" # ensure that the output path is a json file
         
     assert args.input_path.split(".")[-1] == "xml" # ensure that the input path is a musicxml file
     
     token_to_id, _, metadata = open_processed_data_dir(args.processed_data_dir)
-    # print(token_to_id)
+
     for key, value in token_to_id.items():
         token_to_id[key] = int(value) if value not in CONST_TOKENS else value
     
@@ -38,9 +38,10 @@ if __name__ == "__main__":
     rhythms_and_expressions = {}
     total_num_parts = len(parts)
     num_useful_parts = 0
+    want_barlines = metadata["want_barlines"] == "True"
+    no_expressions = metadata["no_expressions"] == "True"
     for i, part in enumerate(parts):
-        tmp = get_rhythms_and_expressions(part=part, want_barlines=metadata["want_barlines"], no_expressions=metadata["no_expressions"], debug=True)
-
+        tmp = get_rhythms_and_expressions(part=part, want_barlines=False, no_expressions=bool(metadata["no_expressions"]), debug=True)[0]
         if tmp is not None:
             rhythms_and_expressions[i+1] = tmp
             num_useful_parts += 1
@@ -56,6 +57,8 @@ if __name__ == "__main__":
     for part, notes in rhythms_and_expressions.items():
         rhythms_and_expressions_tokenized[part] = []            
         for note in notes:
+            # print(note)
+            # note = note[0]
             if note in token_to_id.keys():
                 rhythms_and_expressions_tokenized[part].append(token_to_id[note])
             else:

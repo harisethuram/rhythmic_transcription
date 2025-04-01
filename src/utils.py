@@ -112,8 +112,8 @@ def open_processed_data_dir(processed_data_dir):
     for key, value in token_to_id.items():
         if not key in CONST_TOKENS:
             key = Note(string=key)
-        token_to_id_new[key] = value
-        id_to_token_new[value] = key
+        token_to_id_new[key] = int(value)
+        id_to_token_new[int(value)] = key
         
     return token_to_id_new, id_to_token_new, metadata
 
@@ -137,21 +137,30 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
         note_sequence = note_sequence[:-1]
     result = [[[], []]]
     detokenized_result = [[[], []]]
+    # print("note:", note_sequence)
     j = 0
     for i in range(len(note_sequence)):
+        # print(note_sequence[i])
         if note_sequence[i] == token_to_id[START_OF_SEQUENCE_TOKEN]:
             continue
         # increment j if its a new onset: i is a note and i-1 is a rest or a non-tied note, edge case: i > 1 as you have sos at start
-        if not id_to_token[note_sequence[i]].is_rest and i >= 1 and (id_to_token[note_sequence[i-1]].is_rest or not id_to_token[note_sequence[i-1]].tied_forward):
+        curr_tok = id_to_token[note_sequence[i]]
+        prev_tok = id_to_token[note_sequence[i-1]]
+        # if curr_tok == UNKNOWN_TOKEN:
+        #     j += 1
+        #     result += [[token_to_id[UNKNOWN_TOKEN]], [token_to_id[UNKNOWN_TOKEN]]]
+        #     detokenized_output += [[UNKNOWN_TOKEN], UNKNOWN_TOKEN]
+        #     continue 
+        if not curr_tok.is_rest and i >= 1 and (prev_tok.is_rest or (not prev_tok.tied_forward and not prev_tok.is_rest)):
             j += 1 
             result += [[[], []]]
             detokenized_result += [[[], []]]
-        if not id_to_token[note_sequence[i]].is_rest:
+        if not curr_tok.is_rest:
             result[j][0].append(note_sequence[i])
-            detokenized_result[j][0].append(id_to_token[note_sequence[i]])
+            detokenized_result[j][0].append(curr_tok)
         else:
             result[j][1].append(note_sequence[i])
-            detokenized_result[j][1].append(id_to_token[note_sequence[i]])
+            detokenized_result[j][1].append(curr_tok)
     return result, detokenized_result
 
 def convert_alignment(alignment):
@@ -246,8 +255,10 @@ def convert_alignment(alignment):
     return final_dict
 
 if __name__ == "__main__":
-    tmp = [(1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False), (1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False)]
-    output_dir = "test/"
-    convert_note_tuple_list_to_music_xml(tmp, output_dir)
+    # tmp = [(1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False), (1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False)]
+    # output_dir = "test/"
+    # # convert_note_tuple_list_to_music_xml(tmp, output_dir)
+    id_to_token = json.load(open("processed_data/test_all/id_to_token.json", "r"))
+    print(get_note_and_length_to_token_id_dicts(id_to_token))
     
     
