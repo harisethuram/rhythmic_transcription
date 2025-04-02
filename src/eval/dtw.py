@@ -5,10 +5,10 @@ from tslearn.metrics import dtw_path
 from tqdm import tqdm
 
 def one_to_one_DTW(seq_1, seq_2):
+    """
+    vanilla DTW
+    """
     return dtw_path(seq_1, seq_2)[0]
-
-def cost_function_one_to_one(D, seq_1, seq_2):
-    pass
 
 def one_to_many_DTW(seq_1, seq_2):
     """
@@ -66,7 +66,8 @@ def many_to_one_DTW(seq_1, seq_2):
 
 def hybrid_DTW(seq_1, seq_2):
     """
-    Computes the hybrid DTW alignment between two sequences of onset lengths
+    Computes the hybrid DTW alignment between two sequences of onset lengths. 
+    Here, a note can exclusively be part of either a many-to-one or one-to-many relationship.
     """
     D = np.zeros((len(seq_1)+1, len(seq_2)+1))
     print(len(seq_1), len(seq_2))

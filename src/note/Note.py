@@ -2,6 +2,9 @@ from fractions import Fraction
 import json
 
 class Note:
+    """
+    Abstraction of note tuple, for easier attribute access
+    """
     def __init__(self, duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False, string=None, tple=None):
         if string is not None: # in form of "Note(duration=_, dotted=_, triplet=_, fermata=_, staccato=_, tied_forward=_, is_rest=_)"
             string = string[6:-1]

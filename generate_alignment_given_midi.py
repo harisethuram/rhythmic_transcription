@@ -1,4 +1,5 @@
-# i have mxl_tokenizer to get the json files. I just need to generate the alignment from the midi
+# Takes in path for the transcribed and ground-truth midi files and finds the optimal alignment. Saves the alignment as json file.
+# Currently used for aligning the musescore and ground truth for evaluation. 
 import argparse
 import numpy as np
 import os

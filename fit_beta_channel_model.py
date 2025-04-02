@@ -1,3 +1,5 @@
+# fit the beta channel model given modes and spreads and save it as .pth file
+
 import argparse
 import torch
 from fractions import Fraction

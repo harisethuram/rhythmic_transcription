@@ -1,8 +1,8 @@
-# model computes probability of note given symbollic duration
+# model computes probability of note given symbollic duration, not used at the moment
 import torch
 import torch.nn as nn
 
-class GaussianChannel(nn.Module):
+class GaussianChannel(nn.Module): 
     def __init__(self, sigma=0.1):
         super(GaussianChannel, self).__init__()
         self.sigma = sigma

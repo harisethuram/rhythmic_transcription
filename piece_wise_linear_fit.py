@@ -1,4 +1,4 @@
-# model that takes in a sequence of float onset times, and fits a piece wise linear function to it
+# model that takes in a sequence of float onset times, and fits a piece wise linear function to it to quantize onset-to-onset lengths
 
 import numpy as np
 from scipy.optimize import minimize, dual_annealing

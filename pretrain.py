@@ -1,3 +1,5 @@
+# pretrains language model on data
+
 import argparse
 import os
 import torch

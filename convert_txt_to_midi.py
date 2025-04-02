@@ -1,3 +1,5 @@
+# convert the text files into midi
+
 import pretty_midi
 import os
 import argparse

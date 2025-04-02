@@ -8,6 +8,9 @@ from tslearn.metrics import dtw_path
 
 
 def plot_onset_times(prediction, raw_prediction_labels=None, ground_truth=None, raw_score_onset_lengths=None, alignment=None, save_path=None):
+    """
+    Create the plot of the onset times, potentially with a visualization of the alignment with the ground-truth if those are provided. 
+    """
     # Create a new figure
     # 1: 1, ratio between length of predictions and length of image
     l = min(len(prediction), 655)
@@ -70,12 +73,13 @@ def plot_onset_times(prediction, raw_prediction_labels=None, ground_truth=None, 
         plt.title('Onset Times: Ground Truth vs Prediction with Labels')
     plt.xlabel('Onset Times')
     plt.legend()
-    # plt.grid(axis='x', linestyle='--', alpha=0.7)
     os.makedirs(save_path.rsplit('/', 1)[0], exist_ok=True)
     plt.savefig(save_path)
-    # input()
 
-def scale_onsets(onset_lengths, segments, alphas, verbose=False):
+def scale_onsets(onset_lengths, segments, alphas, verbose=False): # Depracated as we're no longer using a piece-wise fit
+    """
+    Scales onset lengths based on corresponding alphas in segments
+    """
     start = 0
     split_onset_lengths = []
     result = onset_lengths.copy()

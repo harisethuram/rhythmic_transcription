@@ -1,9 +1,12 @@
-# rnn model pretrained on processed kern data
+# RNN language model pretrained on processed kern data
 import torch
 import torch.nn as nn
 
 class RhythmLSTM(nn.Module):
-    def __init__(self, vocab_size=None, embed_size=None, hidden_size=None, num_layers=None): # defaulting to None?
+    """
+    LSTM-based language model to compute probability of score.
+    """
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers): # defaulting to None?
         super(RhythmLSTM, self).__init__()
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embed_size)
         self.lstm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)

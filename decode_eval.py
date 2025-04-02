@@ -1,3 +1,5 @@
+# evaluates the output of the decode algorithm. 
+
 import torch
 import torch.nn as nn
 import music21

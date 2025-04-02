@@ -1,4 +1,4 @@
-# actually does the decoding
+# Decodes the output of the piecewise linear fit. 
 
 import torch
 import torch.nn as nn
@@ -18,12 +18,12 @@ from const_tokens import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--language_model_path", type=str, required=True, help="Path to the language model")
-    parser.add_argument("--channel_model_path", type=str, default=None, help="Path to the channel model")
-    parser.add_argument("--processed_data_dir", type=str, required=True, help="Path to the processed data directory")
+    parser.add_argument("--language_model_path", type=str, required=True, help="Path to the language model .pth file")
+    parser.add_argument("--channel_model_path", type=str, default=None, help="Path to the channel model .pth file")
+    parser.add_argument("--processed_data_dir", type=str, required=True, help="Path to the processed data directory i.e. output of kern_processer.py")
     parser.add_argument("--output_dir", type=str, required=True, help="Path to the output directory")
     parser.add_argument("--note_info_path", type=str, required=True, help="Path to the note info json file. This file contains an array consisting of length 3 (or 4) arrays: [quantized_length, note_portion, rest_portion, pitch (optional)]")
-    parser.add_argument("--decode_method", type=str, default="greedy", help="Decoding method to use")
+    parser.add_argument("--decode_method", type=str, default="greedy", help="Decoding method to use, either greedy or beam search")
     parser.add_argument("--beam_width", type=int, default=5, help="Beam width for beam search")
     parser.add_argument("--temperature", type=float, default=1.0, help="Temperature for sampling") # TODO: get rid of this
     parser.add_argument("--base_value", type=float, default=1.0, help="What length a quarter note corresponds to")

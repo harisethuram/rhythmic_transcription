@@ -8,6 +8,9 @@ import numpy as np
 from const_tokens import *
 
 class TokenizedDataset(Dataset):
+    """
+    Used for formatting a tokenized dataset for pretraining
+    """
     def __init__(self, data_dict):
         """
         Args:
@@ -27,6 +30,9 @@ class TokenizedDataset(Dataset):
         return self.part_id[idx], self.tokenized_data[idx]
 
 def collate_fn(batch, pad_token_id, device="cuda"):
+    """
+    collate
+    """
     part_id = []
     data = []
     for b in batch:
@@ -40,7 +46,7 @@ def preprocess_data(data_path, batch_size, device="cuda") -> DataLoader:
     """
     Preprocess the data, data_path is a dictionary where the keys are the names of the files and the values are the tokenized data.
     """
-    raw_data = json.load(open(os.path.join(data_path, "tokenized_dataset.json"), "r"))
+    raw_data = json.load(open(os.path.join(data_path, "tokenized_dataset.json"), "r")) # TODO: update to use open_processed_data_dir
     token_to_id = pkl.load(open(os.path.join(data_path, "token_to_id.pkl"), "rb"))
     id_to_token = pkl.load(open(os.path.join(data_path, "id_to_token.pkl"), "rb"))
     # dataset = TokenizedDataset(data)

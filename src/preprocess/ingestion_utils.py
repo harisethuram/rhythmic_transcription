@@ -3,13 +3,13 @@ import numpy as np
 from librosa import hz_to_note
 
 
-def midi_to_onsets(midi_file_path):
+def midi_to_onsets(midi_file_path: str):
     """
     takes in a midi file path and returns a list of numpy arrays, each containing the onset times of the notes in a part
     """
     return [np.array([element.offset for element in part.flat.notes]) for part in converter.parse(midi_file_path).parts]
 
-def get_score_note_lengths(midi_file_path, part_number, want_last=False):
+def get_score_note_lengths(midi_file_path: str, part_number: int, want_last=False):
     """
     takes in a midi file path and returns a tuple consisitng of a numpy array of shape (n, 2) of note lengths and rest lengths, and a float of the starting rest if there is one
     """

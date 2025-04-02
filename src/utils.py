@@ -27,19 +27,12 @@ def serialize_json(obj, indent=4, current_indent=0):
     else:
         return json.dumps(str(obj))
     
-def get_token_attribute(token, attribute):
-    key = {
-        "note_length": 0,
-        "is_dotted": 1,
-        "is_triplet": 2,
-        "is_fermata": 3,
-        "is_staccato": 4,
-        "tied_forward": 5,
-        "is_rest": 6,
-    }
-    return token[key[attribute]]
 
 def get_note_and_length_to_token_id_dicts(id_to_token):
+    """
+    Given the id_to_token dictionary, returns a dictionary of note length to note tokens and rest length to rest tokens. 
+    We consider up to two tied notes and two consecutive rests for a single length.
+    """
     
     note_length_to_token_ids = {}
     rest_length_to_token_ids = {}
@@ -95,9 +88,14 @@ def convert_note_tuple_list_to_music_xml(note_tuple_list: List, output_dir, pitc
         pitches = [music21.pitch.Pitch("C4")] * len(note_tuple_list)
         
     pitches = []
+    return None
 
 
 def open_processed_data_dir(processed_data_dir):
+    """
+    Does the typecasting to help with getting the tokenizer dictionaries from the output of kern_processer.py
+    """
+    
     with open(os.path.join(processed_data_dir, "token_to_id.json"), "r") as f:
         token_to_id = json.load(f)
         
@@ -126,7 +124,7 @@ def mxl_to_note(score_path: str, part_id: int) -> List: # TODO: implement this f
     """
     pass
 
-def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> List:
+def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> List: # TODO: handle unks
     """
     Decompose a note sequence into a list of notes and rests
     """

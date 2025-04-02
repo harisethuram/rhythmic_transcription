@@ -417,15 +417,11 @@ def merge_notes(rhythms_and_expressions, offsets):
     
     return new_rhythms_and_expressions
 
-def get_tuple(duration, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False):
-    return (duration, dotted, triplet, fermata, staccato, tied_forward, is_rest)
-
 
 def get_base_tokenizer_dicts(want_barlines=False, no_expressions=True):
-    # note properties: duration, dotted, triplet, fermata, staccato, tied_forward, is_rest
-    durations = [2**i for i in range(-4, 4)]
-    properties = [False, True]
-    articulation_properties = [False] if no_expressions else [False, True]
+    """
+    Creates base tokenizer dictionary without any actual notes
+    """
     
     # Generate all possible combinations of note properties
     token_to_id = {}

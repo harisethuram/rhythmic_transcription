@@ -1,3 +1,5 @@
+# converts an xml file to a tokenized json file
+
 from music21 import converter, note
 import music21
 import argparse
@@ -13,10 +15,11 @@ from src.utils import serialize_json, open_processed_data_dir
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="tokenizes a musicxml file")
-    parser.add_argument("--input_path", type=str, help="Comma-separated list of directories containing kern files.")
+    parser.add_argument("--input_path", type=str, help="Path to xml file.")
     parser.add_argument("--output_path", type=str, help="The path to a json file to write the tokenized output to.")
     parser.add_argument("--processed_data_dir", type=str, help="Directory containing the processed data. Has tokenized data, token_to_id, and id_to_token")
     args = parser.parse_args()
+    
     print(args)
     random.seed(0)
     # print(args)

@@ -18,6 +18,9 @@ from ..note.Note import Note
 from const_tokens import *
 
 class Decoder(nn.Module):
+    """
+    Class that does the decoding of the output of an onset quantizer, into a sequence of notes. 
+    """
     def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0, base_value: float=1.0, unk_score=-1000):
         super(Decoder, self).__init__()
         self.language_model = language_model

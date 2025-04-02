@@ -1,3 +1,4 @@
+# takes in directories to kern files, creates a tokenizer and tokenizes them.
 # output: tokenized_dataset.pkl, token_to_id.pkl, id_to_token.pkl
 
 from music21 import converter, note
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, get_tuple, get_base_tokenizer_dicts, tokenize
+from src.preprocess.tokenizer_utils import get_rhythms_and_expressions, get_base_tokenizer_dicts, tokenize
 from const_tokens import *
 from src.utils import serialize_json
 
