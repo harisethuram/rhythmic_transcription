@@ -46,3 +46,6 @@ def beta_pdf(x, alpha, beta):
     Retuns pdf values of x given a beta distribution parametrized by alpha and beta
     """
     return torch.from_numpy(beta_dist.pdf(x, alpha, beta)).to(x.dtype).to(x.device)
+
+def generate_causal_mask(seq_len):
+    pass

@@ -278,8 +278,7 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
             last_end_idx = i
             last_end = offset + note.get_len()
         last_end = max(last_end, offset + note.get_len())
-    # print(polyphonic_idxs)
-    # print("\n".join([str((t, b, p.nameWithOctave if p is not None else p, n)) for i, (t, b, p, n) in enumerate(zip(ties, bar_numbers, pitches, rhythms_and_expressions)) if i in polyphonic_idxs]))
+    
     # check if any of the polyphonic_idxs are tied forward, if so, discard the entire part
     for i in polyphonic_idxs:
         # print(i)
