@@ -52,7 +52,6 @@ if __name__ == "__main__":
             try:
                 parts = converter.parse(os.path.join(dataset, file)).parts
             except Exception as e:
-                # print(f"Error in file {os.path.join(dataset, file)}: {e}")
                 num_corrupt_files += 1
                 continue
             all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
@@ -61,9 +60,10 @@ if __name__ == "__main__":
             for i, part in enumerate(parts):
                 corrupted = False
                 try:
-                    tmp_parts = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions) # a list of lists of notes
+                    tmp_parts, polyphonic_bars = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions) # a list of lists of notes
                 except Exception as e:
                     tmp_parts = []
+                    polyphonic_bars = None
                     print(f"Error in file {os.path.join(dataset, file)} part {i}: {e}")
                     corrupted = True
                     num_corrupt_parts += 1
@@ -71,6 +71,8 @@ if __name__ == "__main__":
                 for tmp_part in tmp_parts:
                     all_rhythms_and_expressions[os.path.join(dataset, file)][part_counter] = tmp_part
                     part_counter += 1
+                
+                # all_rhythms_and_expressions[os.path.join(dataset, file)][f"polyphonic_bars_{part_counter}"] = str(polyphonic_bars)
                 # except Exception as e:
                 # tmp=None
                 # print(f"Error in file {os.path.join(dataset, file)} part {i}: {e}")
@@ -89,7 +91,11 @@ if __name__ == "__main__":
                 #     print("...")
                 #     for j in end:
                 #         print(j)
-                print(f"num spliced parts for {os.path.join(dataset, file)}:", len(tmp_parts))
+                print(f"num spliced parts for {os.path.join(dataset, file)} - {i}:", len(tmp_parts))
+                # if len(tmp_parts) > 0 and "offering-001" in os.path.join(dataset, file):
+                #     print(tmp_parts[0])
+                #     print("path again:", os.path.join(dataset, file))
+                # in`put()
                 
                 # input()
     print(f"Number of useless parts: {num_useless_parts}/{total_num_parts} ({num_useless_parts/total_num_parts*100:.2f}%)")
@@ -145,7 +151,6 @@ if __name__ == "__main__":
     
     # remove tokens with frequency below unk_threshold
     filtered_train_frequencies = {k: v for k, v in train_frequencies.items() if v > args.unk_threshold}
-    
     
     print(f"Number of tokens with frequency below threshold ({args.unk_threshold}):", len(train_frequencies) - len(filtered_train_frequencies), "out of", len(train_frequencies))
     filtered_train_frequencies[UNKNOWN_TOKEN] = sum([v for k, v in train_frequencies.items() if v <= args.unk_threshold])
@@ -206,6 +211,11 @@ if __name__ == "__main__":
                         num_train_unks += 1
                     
             all_rhythms_and_expressions_tokenized[piece_name][part] = rhythms_and_expressions_tokenized
+            # all_rhythms_and_expressions_tokenized[piece_name]["polyphonic_bars"] = str(parts["polyphonic_bars"])
+        # add the polyphonic bars to the tokenized output
+        # for part in parts.keys():
+        #     if "polyphonic_bars" in str(part):
+        #         all_rhythms_and_expressions_tokenized[piece_name][part] = parts[part]
             
     all_rhythms_and_expressions_tokenized = {k: v for k, v in all_rhythms_and_expressions_tokenized.items() if len(v) > 1}                
                 

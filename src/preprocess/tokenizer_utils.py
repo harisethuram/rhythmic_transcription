@@ -54,64 +54,108 @@ def analyze_duration(dur):
 
     return base_value, dot_value, is_dotted, is_triplet
 
-def tie_chains_from_lists(ties, pitches):
+def normalize_chords(part):
     """
-    Given:
-       ties[i] is one of None, 'start', 'continue', 'stop'
-       pitches[i] is the pitch (could be a music21.pitch.Pitch or any comparable label)
-    Return:
-       A list of tie-chains, where each chain is a list of integer indexes into ties/pitches.
+    Replace chords in part with constituent notes
     """
+    for element in part.recurse():
+        if isinstance(element, music21.chord.Chord):
+            # get the parent component
+            parent = element.activeSite
+            # print(element.offset, [element.notes[i].nameWithOctave for i in range(len(element.notes))])
+            # print("parent before:")
+            # for tmp in parent.recurse():
+            # # if isinstance(tmp, music21.note.Note):
+            #     print(f"{tmp}->{tmp.offset}", end=",")
+            
+            # remove element from the parent
+            
+            
+            # get the notes in the chord
+            for note in element.notes:
+                parent.insert(element.offset, note)
+            parent.remove(element)    
+            # print("\nparent after:")
+            # for tmp in parent.recurse():
+            #     # if isinstance(tmp, music21.note.Note):
+            #     print(f"{tmp}->{tmp.offset}", end=", ")
+            # input()
+def normalize_measures(part):
+    """
+    ensure that measure i + 1 is always one greater than measure i
+    """
+    # starting_measure = 0
+    measures = part.getElementsByClass(music21.stream.Measure)
+    starting_measure = measures[0].number
+    # print("Starting measure:", starting_measure)
+    if not measures:
+        return
+    if starting_measure is None:
+        starting_measure = 1
+    for i, measure in enumerate(measures):
+        measure.number = starting_measure + i
+    
+    
+def remove_grace_notes(part):
+    for element in part.recurse():
+        if isinstance(element, music21.note.Note):
+            # get the parent component
+            parent = element.activeSite
+            if element.duration.quarterLength == 0:
+                # remove element from the parent
+                parent.remove(element)
 
-    # This dict maps pitch -> a stack of "active" chains.
-    # Each active chain is just a list of indexes.
-    active_chains = defaultdict(list)
 
-    # This will hold our final list of completed tie-chains
-    completed_chains = []
+def convert_part_to_interval_list(ties, pitches, bar_numbers, offsets, rhythms_and_expressions):
+    """
+    Convert input lists to a list of intervals of tuples of form (start, end, start_bar, end_bar, pitch, [indices])
+    Also returns a dictionary of intervals where key is (start, end, start_bar, end_bar) and value is a list of lists of indices corresponding to all notes that make up the interval
+    """
+    
+    intervals = []
+    pitch_to_tie_chain = {}
+    
+    for i, (tie, pitch, bar_number, offset, r_and_e) in enumerate(zip(ties, pitches, bar_numbers, offsets, rhythms_and_expressions)):
+        if tie is None:
+            intervals.append((offset, offset + r_and_e.get_len(), bar_number, bar_number, pitch, [i]))
+            
+        else: # in this case we need to check for tie chains
+            if tie == "start":
+                if pitch in pitch_to_tie_chain and pitch_to_tie_chain[pitch] is not None:
+                    print(pitch_to_tie_chain)
+                    raise ValueError("Tie start without stop tie in bar", bar_number, "at offset", offset, "with pitch", pitch)
+                
+                pitch_to_tie_chain[pitch] = [i]
+                
+            elif tie == "continue":
+                if pitch not in pitch_to_tie_chain or pitch_to_tie_chain[pitch] is None:
+                    print("ERROR:")
+                    print(pitch_to_tie_chain)
+                    raise ValueError("Tie continuation without start tie in bar", bar_number, "at offset", offset, "with pitch", pitch)
+                
+                pitch_to_tie_chain[pitch].append(i)
+                
+            elif tie == "stop": # this assumes all ties are stopped
+                if pitch not in pitch_to_tie_chain or pitch_to_tie_chain[pitch] is None:
+                    print("ERROR:")
+                    print(pitch_to_tie_chain)
+                    raise ValueError("Tie stop without start tie in bar", bar_number, "at offset", offset, "with pitch", pitch)
+                
+                pitch_to_tie_chain[pitch].append(i)
+                curr_tie_chain = pitch_to_tie_chain[pitch]
+                pitch_to_tie_chain[pitch] = None
+                intervals.append((offsets[curr_tie_chain[0]], offset + r_and_e.get_len(), bar_numbers[curr_tie_chain[0]], bar_number, pitch, curr_tie_chain))
+    
+    unique_intervals_without_pitch = sorted(list(set([(interval[0], interval[1], interval[2], interval[3]) for interval in intervals])), key=lambda x: x[0])
+    intervals = sorted(intervals, key=lambda x: x[0])
+    
+    interval_dict = {}
+    for interval in intervals:
+        interval_dict[(interval[0], interval[1], interval[2], interval[3])] = interval_dict.get((interval[0], interval[1], interval[2], interval[3]), []) + [interval[5]]
+    
+    return intervals, unique_intervals_without_pitch, interval_dict
 
-    for i, (tie_type, pitch) in enumerate(zip(ties, pitches)):
-        # Ignore notes that aren't tied
-        if tie_type is None:
-            continue
-
-        # Make sure pitch has a stack in active_chains
-        # (defaultdict(list) does this automatically)
-        chain_stack = active_chains[pitch]
-
-        if tie_type == 'start':
-            # Create a new chain for this pitch
-            chain_stack.append([i])
-
-        elif tie_type == 'continue':
-            # Append this note index to the last chain on the stack
-            if not chain_stack:
-                # No chain to continue? Gracefully handle by starting a new chain anyway
-                chain_stack.append([i])
-            else:
-                chain_stack[-1].append(i)
-
-        elif tie_type == 'stop':
-            # Complete the last chain on the stack
-            if not chain_stack:
-                # Edge case: got 'stop' but no active chain. 
-                # We can either ignore or treat it as a single-note chain:
-                completed_chains.append([i])
-            else:
-                chain = chain_stack.pop()
-                chain.append(i)
-                completed_chains.append(chain)
-        # print(active_chains)
-
-    # If any chains never received a 'stop', you can decide whether to keep them as incomplete
-    # or ignore them. Here we’ll just finalize them as-is:
-    for pitch, stack in active_chains.items():
-        for chain in stack:
-            completed_chains.append(chain)
-
-    return completed_chains
-
-def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions: bool=True, want_leading_rests: bool=False, debug=False) -> List:
+def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions: bool=True, want_leading_rests: bool=False, debug=False, part_name=None) -> List:
     """
     Get the rhythms and expressions for a given part 
     part: music21.stream.Part
@@ -120,7 +164,14 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     want_leading_rests: whether to include leading rest
     returns list of Note objects, or none if the part is invalid (i.e. has notes of different lengths with same offset - polyphony)
     """
-    # print("want barlines:", want_barlines)
+    
+    # replace any chords with their constituent notes
+    normalize_chords(part)
+    normalize_measures(part)
+    # print("normalized")
+    # remove grace notes
+    remove_grace_notes(part)
+    
     # get first measure number
     for element in part.flat.notesAndRests:
         current_measure = element.measureNumber
@@ -136,17 +187,13 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     offsets = [] # if two notes are at the same offset and their lengths are different, there must be polyphony
     ties = []
     
+    error_output = ([], None)
+    
     # once we have all the information, we want to sort all by offset, then check for polyphony. Also can do assertion for bar numbers being non-decreasing.
     
     num_notes_seen = 0
-    # offsets = {} # offset to note
-
+    current_measure = 0
     for i, element in enumerate(part.flat.notesAndRests):
-        
-        if current_measure != element.measureNumber and want_barlines:
-            rhythms_and_expressions.append(BARLINE_TOKEN)
-            current_measure = element.measureNumber
-            
         duration = analyze_duration(element.duration)
         
         curr_note = Note(
@@ -166,6 +213,7 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
             ties.append(element.tie.type)
         else:
             ties.append(None)
+        
         if not no_expressions:
             # check if note is staccato
             for articulation in element.articulations:
@@ -180,192 +228,217 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
                         curr_note.fermata = True
                         break
 
-        # check if note is a rest
-        if isinstance(element, music21.note.Rest):
+        if isinstance(element, music21.note.Rest): # if is a rest
             curr_note.is_rest = True
             pitches.append(None)
-            
-        # check if element is a chord, in which case compress all notes into one with top pitch
-        elif isinstance(element, music21.chord.Chord):
-            pitches.append(element.sortAscending()[0])
-            # print("CHORD: ", element.sortAscending())
-            # print("****************************************************************************")
-            # input()
-        else:
+        elif isinstance(element, music21.chord.Chord): # elif is a chord, separate all notes
+            # add each 
+            print("Chord detected at bar", element.measureNumber, "with pitches", [n.nameWithOctave for n in element.notes])
+            raise ValueError("error in normalize_chords, chord detected")
+            # pitches.append(element.sortAscending()[0])
+        else: # else is note
             num_notes_seen += 1
-            pitches.append(element.pitch)
-            
-        # if num_notes_seen == 0 and not want_leading_rests and isinstance(element, music21.note.Rest):
-        #     # print("Skipping leading rest", num_notes_seen, curr_note, i)
-        #     # input()
-        #     continue
-        
+            pitches.append(element.pitch.nameWithOctave)
+
         rhythms_and_expressions.append(curr_note)
+        offsets.append(element.offset)
+        
         bar_numbers.append(element.measureNumber)
         
-        offsets.append(element.offset)
-        # offsets[element.offset] = offsets.get(element.offset, set()) | {i}
-        # if len(offsets[element.offset]) > 1:
-        #     if debug:
-        #         print("Polyphony detected!")
-        #         print(f"Notes at {element.offset}:", offsets[element.offset])
-        #         print("Bar number:", element.measureNumber)
-        #     return None
-    # convert offsets to list of tuples
     
-    # sort all by offset
-    # print(bar_numbers)
-    # print(offsets)
-    argsort = np.argsort(offsets)
-    rhythms_and_expressions = [rhythms_and_expressions[i] for i in argsort]
-    bar_numbers = [bar_numbers[i] for i in argsort]
-    pitches = [pitches[i] for i in argsort]
-    offsets = [offsets[i] for i in argsort]
-    # print(bar_numbers)
+    check0 = len(bar_numbers) == len(rhythms_and_expressions) == len(pitches) == len(offsets) == len(ties)
+    if not check0:
+        print("Length mismatch between bar numbers, rhythms and expressions, pitches, offsets, and ties")
+        return error_output
+
     polyphonic_idxs = set()
-    # try:
-    assert all([bar_numbers[i] <= bar_numbers[i+1] for i in range(len(bar_numbers)-1)])
-    # except:
-    #     print("Bar numbers are not non-decreasing!")
-    #     return []
     
     
-    # now we want to check for polyphony
-    # first check if there are any notes with the same offset and different lengths
-    offset_to_note = {}
-    offset_to_idxs = {}
-    for i, (offset, note) in enumerate(zip(offsets, rhythms_and_expressions)):
-        offset_to_note[offset] = offset_to_note.get(offset, set()) | {note}
-        offset_to_idxs[offset] = offset_to_idxs.get(offset, set()) | {i}
-        if len(offset_to_note[offset]) > 1:
-            # print("Polyphony detected!")
-            # print(offset_to_note[offset])
-            polyphonic_idxs |= offset_to_idxs[offset]
-            # check if any of the notes are tied forward, if so, discard the entire part
-            if any([ties[j] == "start" or ties[j] == "continue" for j in offset_to_idxs[offset]]):
-                print("Tied polyphony (0) detected in bar", bar_numbers[i], "at offset", offset, "with pitches", [pitches[j].nameWithOctave if pitches[j] is not None else pitches[j] for j in offset_to_idxs[offset]], "notes", [rhythms_and_expressions[j] for j in offset_to_idxs[offset]])
-                return []
-            # print(polyphonic_idxs)
-        if len(offset_to_idxs[offset]) > 1:
-            # if any ties forward, then there is tied polyphony in which case we discard the entire part
-            if any([ties[j] == "start" or ties[j] == "continue" for j in offset_to_idxs[offset]]):
-                print("Tied polyphony (1) detected in bar", bar_numbers[i], "at offset", offset, "with pitches", [pitches[j].nameWithOctave if pitches[j] is not None else pitches[j] for j in offset_to_idxs[offset]], "notes", [rhythms_and_expressions[j] for j in offset_to_idxs[offset]])
-                return []
+    check1 = [(bar_numbers[i] is not None) and (bar_numbers[i+1] is not None) and (bar_numbers[i] <= bar_numbers[i+1]) for i in range(len(bar_numbers)-1)]
+    # print("Bar numbers:", bar_numbers)
+    if not all(check1):
+        print("Error: Bar numbers are not in non-decreasing order:")
+        print("Bar numbers:", bar_numbers)
+        print(check1.index(False), bar_numbers[check1.index(False)], bar_numbers[check1.index(False)+1], rhythms_and_expressions[check1.index(False)+1], offsets[check1.index(False)+1], pitches[check1.index(False)+1], ties[check1.index(False)+1])
+        # raise ValueError("Bar numbers are not in non-decreasing order")
+        return error_output
+    bar_to_freq = {}
+    for i in range(len(bar_numbers)):
+        bar_to_freq[bar_numbers[i]] = bar_to_freq.get(bar_numbers[i], 0) + 1
+
+    intervals, unique_intervals_without_pitch, interval_dict = convert_part_to_interval_list(ties, pitches, bar_numbers, offsets, rhythms_and_expressions)
     
-    # merge notes that have the same offset and length
-    # print("Before merging:", [(t, b, p.nameWithOctave if p is not None else p, n) for t, b, p, n in zip(ties, bar_numbers, pitches, rhythms_and_expressions)])
+    # if multiple lists of indices correspond to the same interval in interval_dict, get rid of all but the first
+    # want as output a list of indices that aren't redundant based on their intervals
+    new_indices = []
+    for interval, info in interval_dict.items():
+        new_indices += info[0]
     
+    new_indices.sort()
+    missings = []
+    for i, bar_number in enumerate(bar_numbers):
+        if i not in new_indices:
+            missings.append(bar_number)
+    # print(new_indices)
+    # print(missings)
     
-    
-    
-    # now we've compressed
-    # next, check for overlapping notes
-    
-    
-    last_end = -1
-    last_end_idx = None
-    for i, (offset, note) in enumerate(zip(offsets, rhythms_and_expressions)):
-        # print(offset, note)
-        # if both notes are exactly the same, then we don't care
-        if offset < last_end and not(note == rhythms_and_expressions[last_end_idx]):
-            # print("overlapping notes detected!")
-            # print(offset, bar_numbers[i], note, last_end, bar_numbers[last_end_idx], rhythms_and_expressions[last_end_idx])
-            polyphonic_idxs.add(i)
-            polyphonic_idxs.add(last_end_idx)
-            # print(polyphonic_idxs)
-        # print("note:",note)
-        if offset + note.get_len() > last_end:
-            last_end_idx = i
-            last_end = offset + note.get_len()
-        last_end = max(last_end, offset + note.get_len())
-    
-    # check if any of the polyphonic_idxs are tied forward, if so, discard the entire part
-    for i in polyphonic_idxs:
-        # print(i)
-        if ties[i] is not None:
-            print("Tied polyphony (2) detected in bar", bar_numbers[i], "at offset", offsets[i], "with pitch", pitches[i].nameWithOctave if pitches[i] is not None else pitches[i], "note", rhythms_and_expressions[i])
-            return []
-    
+    polyphonic_bars = set()
+    # check if any of the intervals overlap and if so, add the bar numbers to polyphonic_bars
+    farthest = unique_intervals_without_pitch[0]
+    for i in range(1, len(unique_intervals_without_pitch)):
+        if farthest[1] > unique_intervals_without_pitch[i][0]: # overlap
+            polyphonic_bars |= set([j for j in range(unique_intervals_without_pitch[i][2], unique_intervals_without_pitch[i][3]+1)])
+            polyphonic_bars |= set([j for j in range(farthest[2], farthest[3]+1)])
+            # print(unique_intervals_without_pitch[i], farthest, farthest[1], unique_intervals_without_pitch[i][0])
         
-    # otherwise, discard the entire bar where polyphony is detected
-    polyphonic_bars = set([bar_numbers[i] for i in polyphonic_idxs])
-    # conver to sorted list
-    polyphonic_bars = sorted(list(polyphonic_bars))
-    # print("all polyphonic bars:", polyphonic_bars)
-    # now we want to splice the part on these bars
-    polyphonic_bar_pointer = 0    
+        if unique_intervals_without_pitch[i][1] > farthest[1]:
+            farthest = unique_intervals_without_pitch[i]
+    # input()    
     
-    new_rhythms_and_expressions = []
-    curr_rhythms_and_expressions = []
-    new_bar_numbers = []
-    curr_bar_numbers = []
-    new_pitches = []
-    curr_pitches = []
-    new_offsets = []
-    curr_offsets = []
-    new_ties = []
-    curr_ties = []
+    # return error_output
+    # print(set(bar_numbers))
+    # print(len(bar_numbers))
+    # print("Polyphonic bars:", sorted(list(polyphonic_bars)))
     
-    
-    for i, (bar_number, note, pitch, offset, tie) in enumerate(zip(bar_numbers, rhythms_and_expressions, pitches, offsets, ties)):
-        if polyphonic_bar_pointer < len(polyphonic_bars) and bar_number == polyphonic_bars[polyphonic_bar_pointer]:
-            if not curr_rhythms_and_expressions:
-                continue
-            new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
-            curr_rhythms_and_expressions = []
-            new_bar_numbers.append(curr_bar_numbers)
-            curr_bar_numbers = []
-            # new_pitches.append(curr_pitches)
-            # curr_pitches = []
-            new_offsets.append(curr_offsets)
-            curr_offsets = []
-            # new_ties.append(curr_ties)
-            # curr_ties = []
-            
-            polyphonic_bar_pointer += 1
-            print("Splicing on bar", bar_number, polyphonic_bar_pointer)
+    # now that we've accounted for all overlaps, we want to splice
+    curr_splice = []
+    all_splices = []
+    for i, idx in enumerate(new_indices):
+        if bar_numbers[idx] in polyphonic_bars:
+            if curr_splice:
+                all_splices.append(curr_splice)
+                curr_splice = []
         else:
-            curr_rhythms_and_expressions.append(note)
-            curr_bar_numbers.append(bar_number)
-            # curr_pitches.append(pitch)
-            curr_offsets.append(offset)
-            # curr_ties.append(tie)
+            curr_splice.append(idx)
             
-            
-            
-    if curr_rhythms_and_expressions:
-        new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
-        new_bar_numbers.append(curr_bar_numbers)
-        # new_pitches.append(curr_pitches)
-        new_offsets.append(curr_offsets)
-        # new_ties.append(curr_ties)
-    
-    # for r in new_rhythms_and_expressions:
-    #     for j in r:
-    #         print(j)
-    #     # print(r)
-    # # print(new_rhythms_and_expressions)
-    # input()
-    new_rhythms_and_expressions = [merge_notes(rhythms_and_expressions, offsets) for rhythms_and_expressions, offsets in zip(new_rhythms_and_expressions, new_offsets)]
-    # print("nle", len(new_rhythms_and_expressions))
-    # we also want to remove any leading rests
+    if curr_splice:
+        all_splices.append(curr_splice)
+    # print("All splices:", all_splices)
+    # for splice in all_splices:
+    #     print("Splice:", bar_numbers[splice[0]], bar_numbers[splice[-1]])
+        
+    # remove leading rests
     if not want_leading_rests:
-        for i, rhythms_and_expressions in enumerate(new_rhythms_and_expressions):
-            first_note_idx = 0
-            for j, note in enumerate(rhythms_and_expressions):
-                if not note.is_rest:
-                    first_note_idx = j
-                    break
-            # print(i, len(new_rhythms_and_expressions))
-            new_rhythms_and_expressions[i] = rhythms_and_expressions[first_note_idx:]    
+        for splice in all_splices:
+            while splice and rhythms_and_expressions[splice[0]].is_rest:
+                splice.pop(0)
+                
+    # create new rhythms and expressions and bar numbers
+    all_rhythms_and_expressions = []
+    all_bar_numbers = []
     
-    for rhythms_and_expressions in new_rhythms_and_expressions:
-        # add start of sequence token
-        rhythms_and_expressions.insert(0, START_OF_SEQUENCE_TOKEN)
-        # add end of sequence token
-        rhythms_and_expressions.append(END_OF_SEQUENCE_TOKEN)
-          
-    return new_rhythms_and_expressions
+    for splice in all_splices:
+        all_rhythms_and_expressions.append([rhythms_and_expressions[i] for i in splice])
+        all_bar_numbers.append([bar_numbers[i] for i in splice])
+    
+    # add barlines if necessary
+    if want_barlines:
+        for rhythm_and_expressions, bar_numbers in zip(all_rhythms_and_expressions, all_bar_numbers):
+            bar_borders = [i+1 for i in range(len(bar_numbers)-1) if bar_numbers[i] != bar_numbers[i+1]][::-1]
+            for i in bar_borders:
+                rhythm_and_expressions.insert(i, BARLINE_TOKEN)
+    # print("All rhythms and expressions:")
+    
+    def print_with_barlines(rhythm_and_expressions):
+        curr_string = ""
+        for i, note in enumerate(rhythm_and_expressions):
+            curr_string += str(note) + ", "
+            
+            if note == BARLINE_TOKEN:
+                print("\"" + curr_string + "\"")
+                curr_string = ""
+        print("\"" + curr_string + "\"")
+    
+    # for rhythm_and_expressions in all_rhythms_and_expressions:
+    #     print("first 20:")
+    #     # split print by barline
+    #     # curr_string = ""
+    #     print(print_with_barlines(rhythm_and_expressions[:20]))
+    #     print("last 20:")
+    #     print(print_with_barlines(rhythm_and_expressions[-20:]))
+    #     # print(rhythm_and_expressions[:20])
+    #     # print(rhythm_and_expressions[-20:])
+    #     input()
+    
+    # finally, add start and end of sequence tokens
+    for rhythm_and_expressions in all_rhythms_and_expressions:
+        rhythm_and_expressions.insert(0, START_OF_SEQUENCE_TOKEN)
+        rhythm_and_expressions.append(END_OF_SEQUENCE_TOKEN)
+        
+    return all_rhythms_and_expressions, sorted(list(polyphonic_bars))
+    # input()
+    # return error_output
+    
+    # fix splicing to include all different lists and remove leading rests and add barlines to each if necessary
+    
+    # # otherwise, discard the entire bar where polyphony is detected
+    # polyphonic_bars = set([bar_numbers[i] for i in polyphonic_idxs])
+    # # convert to sorted list
+    # polyphonic_bars = sorted(list(polyphonic_bars))
+    # print("Polyphonic bars:", polyphonic_bars)
+    
+    # if want_barlines:
+    #     rhythms_and_expressions, bar_numbers, offsets = add_barlines(rhythms_and_expressions, bar_numbers, offsets)
+    # # return [rhythms_and_expressions]
+    # # now we want to splice the part on these bars
+    # polyphonic_bar_pointer = 0    
+    
+    # new_rhythms_and_expressions = []
+    # curr_rhythms_and_expressions = []
+    # new_bar_numbers = []
+    # curr_bar_numbers = []
+    # new_pitches = []
+    # curr_pitches = []
+    # new_offsets = []
+    # curr_offsets = []
+    # new_ties = []
+    # curr_ties = []
+    # this is wrong
+    # for i, (bar_number)
+    
+    # for i, (bar_number, note, pitch, offset, tie) in enumerate(zip(bar_numbers, rhythms_and_expressions, pitches, offsets, ties)):
+    #     if polyphonic_bar_pointer < len(polyphonic_bars) and bar_number == polyphonic_bars[polyphonic_bar_pointer]:
+    #         if not curr_rhythms_and_expressions:
+    #             continue
+    #         new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
+    #         curr_rhythms_and_expressions = []
+    #         new_bar_numbers.append(curr_bar_numbers)
+    #         curr_bar_numbers = []
+    #         new_offsets.append(curr_offsets)
+    #         curr_offsets = []
+            
+    #         polyphonic_bar_pointer += 1
+    #         print("Splicing on bar", bar_number, polyphonic_bar_pointer)
+    #     else:
+    #         curr_rhythms_and_expressions.append(note)
+    #         curr_bar_numbers.append(bar_number)
+    #         curr_offsets.append(offset)            
+            
+            
+    # if curr_rhythms_and_expressions:
+    #     new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
+    #     new_bar_numbers.append(curr_bar_numbers)
+    #     new_offsets.append(curr_offsets)
+
+    # new_rhythms_and_expressions = [merge_notes(rhythms_and_expressions, offsets) for rhythms_and_expressions, offsets in zip(new_rhythms_and_expressions, new_offsets)]
+
+    # # we also want to remove any leading rests
+    # if not want_leading_rests:
+    #     for i, rhythms_and_expressions in enumerate(new_rhythms_and_expressions):
+    #         first_note_idx = 0
+    #         for j, note in enumerate(rhythms_and_expressions):
+    #             if note != BARLINE_TOKEN and note.is_rest == False:
+    #                 first_note_idx = j
+    #                 break
+    #         new_rhythms_and_expressions[i] = rhythms_and_expressions[first_note_idx:]    
+    
+    # for rhythms_and_expressions in new_rhythms_and_expressions:
+    #     # add start of sequence token
+    #     rhythms_and_expressions.insert(0, START_OF_SEQUENCE_TOKEN)
+    #     # add end of sequence token
+    #     rhythms_and_expressions.append(END_OF_SEQUENCE_TOKEN)
+    
+    # return new_rhythms_and_expressions, polyphonic_bars
     
     
     # finally, check for overlaps caused by tied notes. How can this edge case happen? If n1 of pitch p1 is tied to n2 of pitch p1, and there is n3 of pitch p3 at the same offset as n2, then there is polyphony. 
@@ -398,7 +471,25 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     # if debug:
     #     print("Rhythms and expressions:", offsets)
 
-
+def add_barlines(rhythms_and_expressions, bar_numbers, offsets):
+    """
+    Adds barlines to input lists based on the bar numbers.
+    """
+    new_rhythms_and_expressions = []
+    new_bar_numbers = []
+    new_offsets = []
+    curr_barline = None
+    for i, (rhythm_and_expression, bar_number, offset) in enumerate(zip(rhythms_and_expressions, bar_numbers, offsets)):
+        if bar_number != curr_barline:
+            curr_barline = bar_number
+            new_rhythms_and_expressions.append(BARLINE_TOKEN)
+            new_bar_numbers.append(bar_number)
+            new_offsets.append(offset)
+        new_rhythms_and_expressions.append(rhythm_and_expression)
+        new_bar_numbers.append(bar_number)
+        new_offsets.append(offset)
+    return new_rhythms_and_expressions, new_bar_numbers, new_offsets
+    
 def merge_notes(rhythms_and_expressions, offsets):
     """
     merges notes that have the same offset and length

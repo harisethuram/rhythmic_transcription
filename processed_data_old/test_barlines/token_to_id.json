@@ -1,0 +1,18 @@
+{
+    "<PAD>": "0",
+    "<UNK>": "1",
+    "<SOS>": "2",
+    "<EOS>": "3",
+    "Note(duration=1/4, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "4",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "5",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "6",
+    "Note(duration=1/8, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "7",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "8",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "9",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "10",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "11",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "12",
+    "Note(duration=1/4, dotted=False, triplet=False, fermata=False, staccato=True, tied_forward=False, is_rest=False)": "13",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "14",
+    "Note(duration=1/2, dotted=False, triplet=True, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "15"
+}

@@ -1,0 +1,14 @@
+{
+    "Note(duration=1/4, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "1171",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "3237",
+    "<BARLINE>": "1453",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "202",
+    "Note(duration=1/8, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "106",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "178",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "534",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "194",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "122",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "1329",
+    "Note(duration=1/2, dotted=False, triplet=True, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "138",
+    "<UNK>": "988"
+}

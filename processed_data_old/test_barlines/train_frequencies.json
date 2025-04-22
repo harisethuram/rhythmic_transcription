@@ -1,0 +1,15 @@
+{
+    "Note(duration=1/4, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "1463",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "3802",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "228",
+    "Note(duration=1/8, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "128",
+    "Note(duration=1/2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "204",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "645",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "245",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=True, is_rest=False)": "146",
+    "Note(duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "1645",
+    "Note(duration=1/4, dotted=False, triplet=False, fermata=False, staccato=True, tied_forward=False, is_rest=False)": "120",
+    "Note(duration=2, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=True)": "111",
+    "Note(duration=1/2, dotted=False, triplet=True, fermata=False, staccato=False, tied_forward=False, is_rest=False)": "138",
+    "<UNK>": "773"
+}

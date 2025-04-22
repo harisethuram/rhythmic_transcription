@@ -101,9 +101,12 @@ def open_processed_data_dir(processed_data_dir):
         
     with open(os.path.join(processed_data_dir, "id_to_token.json"), "r") as f:
         id_to_token = json.load(f)
-        
-    with open(os.path.join(processed_data_dir, "metadata.json"), "r") as f:
-        metadata = json.load(f)
+    
+    metadata = None
+    
+    if os.path.exists(os.path.join(processed_data_dir, "metadata.json")):   
+        with open(os.path.join(processed_data_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
     # print(token_to_id)
     token_to_id_new = {}
     id_to_token_new = {}
