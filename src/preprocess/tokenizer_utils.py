@@ -2,9 +2,39 @@ import music21
 import json
 from typing import List, Dict
 import numpy as np
+from fractions import Fraction
 
 from const_tokens import *
 from ..note.Note import Note
+
+
+def dur_to_notes(dur):
+    # find if single note fits
+    def frac(i):
+        return Fraction(1, 2**-i) if i < 0 else Fraction(2**i, 1)
+    lowest = -3
+    highest = 2
+    base_two_notes = [Note(duration=frac(i), dotted=dot, triplet=False) for i in range(lowest, highest+1) for dot in [False, True]]
+    triplets = [Note(duration=frac(i), dotted=False, triplet=True) for i in range(lowest, highest+1)]
+
+    tol = frac(lowest) / 12
+    notes = base_two_notes + triplets
+    for note in notes:
+        if abs(note.get_len() - dur) < tol:
+            return [note]
+    
+    # check if dur requires a tie
+    first_candidates = sorted(base_two_notes, key=lambda x: -x.get_len())
+    second_candidates = sorted(notes, key=lambda x: -x.get_len())
+    
+    for first in first_candidates:
+        if first.get_len() > dur - 7*tol:
+            continue
+        for second in second_candidates:
+            if abs((first.get_len() + second.get_len()) - dur) < tol:
+                first.tied_forward = True
+                return [first, second]
+    return None
 
 def analyze_duration(dur):
     """
@@ -20,8 +50,12 @@ def analyze_duration(dur):
     Returns:
     tuple: (base_value, dot_value, is_dotted, is_triplet)
     """
-    base_value = dur.quarterLength
-    float_duration = dur.quarterLength
+    if not isinstance(dur, music21.note.Note):
+        base_value = dur
+        float_duration = dur
+    else:   
+        base_value = dur.quarterLength
+        float_duration = dur.quarterLength
     dot_value = 0
     is_dotted = False
     is_triplet = False

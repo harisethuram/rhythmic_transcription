@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pretrain
-#SBATCH --partition=gpu-titan
+#SBATCH --partition=gpu-l40
 #SBATCH --account=ark
 #SBATCH --nodes=1
 #SBATCH --mem=64G
@@ -16,14 +16,16 @@ batch_sizes=(32) # 64 128)
 embed_sizes=(32) # 64 128)
 hidden_sizes=(256) # 128 256)
 
+source activate rhythm
+
 for lr in "${lrs[@]}"; do
     for batch_size in "${batch_sizes[@]}"; do
         for embed_size in "${embed_sizes[@]}"; do
             for hidden_size in "${hidden_sizes[@]}"; do
                 echo "Running pretrain with lr=$lr, batch_size=$batch_size, embed_size=$embed_size, hidden_size=$hidden_size"
                 python pretrain.py \
-                    --processed_data_dir "processed_data/test_all"\
-                    --output_dir "models/tmp/test_all" \
+                    --processed_data_dir "processed_data/all/barlines"\
+                    --output_dir "models/test/barlines" \
                     --embed_size $embed_size \
                     --hidden_size $hidden_size \
                     --num_layers 2 \

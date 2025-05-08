@@ -7,6 +7,20 @@ import os
 from const_tokens import *
 from .note.Note import Note
 
+def flatten_notes(path):
+    """
+    Takes in path to decomposed notes and flattens them into a single list
+    """
+    safe_globals = {"__builtins__": None, "Note": Note}
+    with open(path, "r") as f:
+        notes = json.load(f)
+        notes = [eval(note) for note in notes]
+    results = []
+    for curr_notes, curr_rests in notes:
+        results += [Note(string=str(note)) for note in curr_notes] + [Note(string=str(rest)) for rest in curr_rests]
+    return results
+
+
 def serialize_json(obj, indent=4, current_indent=0):
     """
     Recursively serialize JSON object with indentation,

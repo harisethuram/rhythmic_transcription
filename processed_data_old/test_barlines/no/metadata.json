@@ -1,8 +1,0 @@
-{
-    "num_train_unks": "845",
-    "num_train_tokens": "9772",
-    "want_barlines": "False",
-    "no_expressions": "False",
-    "train_split": "0.9",
-    "unk_threshold": "100"
-}

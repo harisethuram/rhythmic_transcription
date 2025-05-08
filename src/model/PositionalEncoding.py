@@ -24,7 +24,6 @@ class PositionalEncoding(nn.Module):
             x: Tensor of shape (batch_size, seq_len, d_model) if batch_first=True
                or (seq_len, batch_size, d_model) if batch_first=False.
         """
-        # print(self.pe.device , x.device)
         if batch_first:
             seq_len = x.shape[1]
             x = x + self.pe[:, :seq_len, :]
