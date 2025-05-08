@@ -24,3 +24,5 @@ __pycache__/
 # all pycache
 *.pyo
 musescore/
+output/
+out/
