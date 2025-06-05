@@ -21,14 +21,13 @@ class Decoder(nn.Module):
     """
     Class that does the decoding of the output of an onset quantizer, into a sequence of notes. 
     """
-    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, temperature: float=1.0, base_value: float=1.0, unk_score=-1000):
+    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, base_value: float=1.0, unk_score=-1000):
         super(Decoder, self).__init__()
         self.language_model = language_model
         self.beta_channel_model = beta_channel_model
         self.token_to_id = token_to_id
         self.id_to_token = id_to_token
         self.beam_width = beam_width
-        self.temperature = temperature
         self.base_value = Fraction.from_float(base_value)
         self.unk_score = unk_score
 
@@ -48,7 +47,7 @@ class Decoder(nn.Module):
         
         if flatten:
             return out
-        # out = [22, 19, 4, 4, 14, 16, 19, 35, 19, 19, 35, 35] # for testing
+        # for testing
         result, detokenized_result = decompose_note_sequence(out, self.token_to_id, self.id_to_token)
         print("result:", result, len(result))
         if debug:
@@ -80,11 +79,7 @@ class Decoder(nn.Module):
         all_beta_probs = F.logsigmoid(all_beta_probs)
         
         note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
-        
-        # starts = to_help(torch.Tensor([[self.token_to_id[START_OF_SEQUENCE_TOKEN]]]))
-        
-        
-        
+
         results = [[self.token_to_id[START_OF_SEQUENCE_TOKEN]] for _ in range(self.beam_width)]
         
         prefixes = [to_tensor(self.token_to_id[START_OF_SEQUENCE_TOKEN])]
@@ -94,12 +89,7 @@ class Decoder(nn.Module):
         next_token_log_probs_all_beams = [F.log_softmax(tmp1, dim=-1)]
         hidden_states = [tmp2]
         cell_states = [tmp3]        
-        
-        # print("next token logits:", next_token_logits_all_beams.shape)
-        # print("hidden states:", hidden_states.shape)
-        # print(hidden_states)
-        # print("cell states:", cell_states.shape)
-        # print("num layers:", self.language_model.lstm.num_layers)
+
         print("all_beta_probs:", len(all_beta_probs))
         
         self.language_model.eval()
@@ -107,10 +97,7 @@ class Decoder(nn.Module):
         with torch.no_grad():
             for i, (beta_probs, candidate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
                 candidates_all_beams = [[] for _ in range(len(prefixes))] 
-                # print("empty:", candidates_all_beams)
                 beta_log_probs = beta_probs
-                # print(beam_log_probs)
-                # input()
                 # for each element of prefixes, we want to compute the probabilities of all candidates. 
                 # we want two arrays, first one consists of all the prefices of length beam_width, and the second consists of all tuples of (candidates, probability) for each prefix of shape (beam_width, num_candidates)
                 # then we select the top beam_width candidates from second array, and choose the corresponding prefices from the first array and do the concatenation
@@ -191,20 +178,12 @@ class Decoder(nn.Module):
                 next_token_log_probs_all_beams = new_next_token_log_probs_all_beams
                 hidden_states = new_hidden_states
                 cell_states = new_cell_states
-                
-                # print("top candidates:", top_candidates)
-                # print("new prefixes:", prefixes)
-                # input()
-        # print()
         # return the best beam
-        # print("beam log probs:", beam_log_probs)
         best_beam = np.argmax([i.item() for i in beam_log_probs])
         ans = prefixes[best_beam].tolist()
         print("ans:", ans, len(ans))
         return ans
     
-        
-        
     
     def _greedy_decode(self, note_info: List):
         # with open(note_info_path, "r") as f:
@@ -214,8 +193,6 @@ class Decoder(nn.Module):
             if len(x.shape) == 2:
                 x = x.squeeze()
             return x
-        
-       
         
         note_lengths = [float(note[0]) for note in note_info]
         note_portions = torch.Tensor([float(note[1]) for note in note_info]) # (num_notes)
@@ -246,7 +223,6 @@ class Decoder(nn.Module):
         # apply a log sigmoid to the beta probs to ensure they are between 0 and 1 in log space
         all_beta_probs = F.logsigmoid(all_beta_probs)
         
-                
         note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
         
         start = torch.tensor([self.token_to_id[START_OF_SEQUENCE_TOKEN]])

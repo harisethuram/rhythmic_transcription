@@ -7,6 +7,32 @@ from fractions import Fraction
 from const_tokens import *
 from ..note.Note import Note
 
+def get_measure_lengths(score_path, part=0):
+    """
+    Get the lengths of measures from a score.
+    :param score_path: Path to the score file.
+    :return: List of measure lengths.
+    """
+    try:
+        score = converter.parse(score_path).parts[part]
+        
+        measure_lengths = set()
+        
+        for meas in score.getElementsByClass('Measure'):
+            if meas.barDuration is not None:
+                measure_lengths.add(meas.barDuration.quarterLength)
+            else:
+                # Extremely rare: no barDuration (e.g., TS suppressed).
+                # Fall back to the previous time signature context.
+                ts = meas.getContextByClass('TimeSignature')
+                measure_lengths.add(ts.barDuration.quarterLength if ts else None)
+
+        return measure_lengths
+
+    except Exception as e:
+        print(f"Error processing {score_path}: {e}")
+        return None
+
 
 def dur_to_notes(dur):
     # find if single note fits
@@ -50,10 +76,12 @@ def analyze_duration(dur):
     Returns:
     tuple: (base_value, dot_value, is_dotted, is_triplet)
     """
-    if not isinstance(dur, music21.note.Note):
+    if isinstance(dur, float) or isinstance(dur, int):
+        # print("type:", type(dur))
         base_value = dur
         float_duration = dur
     else:   
+        # print("type12:", type(dur))
         base_value = dur.quarterLength
         float_duration = dur.quarterLength
     dot_value = 0
@@ -114,6 +142,7 @@ def normalize_chords(part):
             #     # if isinstance(tmp, music21.note.Note):
             #     print(f"{tmp}->{tmp.offset}", end=", ")
             # input()
+
 def normalize_measures(part):
     """
     ensure that measure i + 1 is always one greater than measure i
@@ -128,7 +157,6 @@ def normalize_measures(part):
         starting_measure = 1
     for i, measure in enumerate(measures):
         measure.number = starting_measure + i
-    
     
 def remove_grace_notes(part):
     for element in part.recurse():
@@ -189,7 +217,7 @@ def convert_part_to_interval_list(ties, pitches, bar_numbers, offsets, rhythms_a
     
     return intervals, unique_intervals_without_pitch, interval_dict
 
-def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions: bool=True, want_leading_rests: bool=False, debug=False, part_name=None) -> List:
+def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions: bool=True, want_leading_rests: bool=False, debug=False, part_name=None, want_measure_lengths: bool=False) -> List:
     """
     Get the rhythms and expressions for a given part 
     part: music21.stream.Part
@@ -200,6 +228,15 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     """
     
     # replace any chords with their constituent notes
+    error_output = ([], None)
+    
+    if want_measure_lengths:
+        measure_quarter_lengths = get_measure_lengths(part_name, part)
+        if measure_quarter_lengths is None or len(measure_quarter_lengths) != 1:
+            print("Error: Part is invalid, measure lengths are not consistent or not found.")
+            return error_output
+        
+    
     normalize_chords(part)
     normalize_measures(part)
     # print("normalized")
@@ -220,8 +257,6 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     pitches = [] # in case of ties forward, if consecutive notes don't have the same pitch, there must be polyphony
     offsets = [] # if two notes are at the same offset and their lengths are different, there must be polyphony
     ties = []
-    
-    error_output = ([], None)
     
     # once we have all the information, we want to sort all by offset, then check for polyphony. Also can do assertion for bar numbers being non-decreasing.
     
@@ -394,8 +429,26 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     #     # print(rhythm_and_expressions[-20:])
     #     input()
     
-    # finally, add start and end of sequence tokens
+    # finally, add start and end of sequence tokens and measure length tokens if flagged
+    if want_measure_lengths:
+        measure_length = measure_quarter_lengths.pop()
+        if measure_length is None:
+            print("Error: Measure length is None, cannot proceed.")
+            return error_output
+        
+        measure_length_token = QUARTER_LENGTHS.get(measure_length, None)
+        
+        if measure_length_token is None:
+            print(f"Error: Measure length {measure_length} not found in QUARTER_LENGTHS.")
+            return error_output
+        
+        # add measure length token to each rhythm and expression
+        
     for rhythm_and_expressions in all_rhythms_and_expressions:
+        
+        if want_measure_lengths:
+            rhythm_and_expressions.insert(0, measure_length_token)
+        
         rhythm_and_expressions.insert(0, START_OF_SEQUENCE_TOKEN)
         rhythm_and_expressions.append(END_OF_SEQUENCE_TOKEN)
         

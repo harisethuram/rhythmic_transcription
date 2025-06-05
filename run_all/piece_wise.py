@@ -7,7 +7,7 @@ from statistics import median
 if __name__ == "__main__":
     data = pd.read_csv("metadata/URMP/metadata.csv")
     errors = {}
-    root_result_dir = "debug_results/"
+    root_result_dir = "output/presentation_results/piecewise"
     
     test_lim = 10000
     for i, row in data.iterrows():

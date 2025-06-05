@@ -7,18 +7,59 @@ import os
 from const_tokens import *
 from .note.Note import Note
 
-def flatten_notes(path):
+
+def get_measure_lengths(score_path):
     """
-    Takes in path to decomposed notes and flattens them into a single list
+    Get the lengths of measures from a score.
+    :param score_path: Path to the score file.
+    :return: List of measure lengths.
+    """
+    try:
+        score = converter.parse(score_path).parts[0]
+        
+        measure_lengths = set()
+        
+        for meas in score.getElementsByClass('Measure'):
+            if meas.barDuration is not None:
+                measure_lengths.add(meas.barDuration.quarterLength)
+            else:
+                # Extremely rare: no barDuration (e.g., TS suppressed).
+                # Fall back to the previous time signature context.
+                ts = meas.getContextByClass('TimeSignature')
+                measure_lengths.add(ts.barDuration.quarterLength if ts else None)
+
+        return measure_lengths
+
+    except Exception as e:
+        print(f"Error processing {score_path}: {e}")
+        return None
+
+def flatten_notes(path, note_info_path=None):
+    """
+    Takes in path to decomposed notes and flattens them into a single list. If provided note_info_path, also returns list of aligned pitches.
     """
     safe_globals = {"__builtins__": None, "Note": Note}
     with open(path, "r") as f:
         notes = json.load(f)
         notes = [eval(note) for note in notes]
+    
+    pitches = [None] * len(notes)
+    
+    if note_info_path is not None:
+        pitches = [i[-1] for i in json.load(open(note_info_path, "r"))]
+
     results = []
-    for curr_notes, curr_rests in notes:
-        results += [Note(string=str(note)) for note in curr_notes] + [Note(string=str(rest)) for rest in curr_rests]
-    return results
+    result_pitches = []
+    assert len(notes) == len(pitches)
+    for (curr_notes, curr_rests), pitch in zip(notes, pitches):
+        curr_notes_Note = [Note(string=str(note)) for note in curr_notes]
+        curr_notes_pitches = [pitch] * len(curr_notes_Note)
+        curr_rests_Note = [Note(string=str(rest)) for rest in curr_rests]
+        curr_rests_pitches = [None] * len(curr_rests_Note)
+        results += curr_notes_Note + curr_rests_Note
+        result_pitches += curr_notes_pitches + curr_rests_pitches
+    assert len(results) == len(result_pitches)
+    return results, result_pitches
 
 
 def serialize_json(obj, indent=4, current_indent=0):
@@ -145,14 +186,19 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
     """
     Decompose a note sequence into a list of notes and rests
     """
+    
     if note_sequence[0] == token_to_id[START_OF_SEQUENCE_TOKEN]:
-        print("yes")
+        # print("yes")
         note_sequence = note_sequence[1:]
     if note_sequence[-1] == token_to_id[END_OF_SEQUENCE_TOKEN]:
         note_sequence = note_sequence[:-1]
     result = [[[], []]]
     detokenized_result = [[[], []]]
     # print("note:", note_sequence)
+    # print(note_sequence)
+    # print(token_to_id)
+    # print(id_to_token)
+    # input()
     j = 0
     for i in range(len(note_sequence)):
         # print(note_sequence[i])
@@ -166,10 +212,14 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
         #     result += [[token_to_id[UNKNOWN_TOKEN]], [token_to_id[UNKNOWN_TOKEN]]]
         #     detokenized_output += [[UNKNOWN_TOKEN], UNKNOWN_TOKEN]
         #     continue 
-        if not curr_tok.is_rest and i >= 1 and (prev_tok.is_rest or (not prev_tok.tied_forward and not prev_tok.is_rest)):
-            j += 1 
-            result += [[[], []]]
-            detokenized_result += [[[], []]]
+        try:
+            if not curr_tok.is_rest and i >= 1 and (prev_tok.is_rest or (not prev_tok.tied_forward and not prev_tok.is_rest)):
+                j += 1 
+                result += [[[], []]]
+                detokenized_result += [[[], []]]
+        except:
+            print(curr_tok)
+            # input()
         if not curr_tok.is_rest:
             result[j][0].append(note_sequence[i])
             detokenized_result[j][0].append(curr_tok)
@@ -177,6 +227,52 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
             result[j][1].append(note_sequence[i])
             detokenized_result[j][1].append(curr_tok)
     return result, detokenized_result
+
+def decompose_note_sequence_notes(note_sequence: List, token_to_id, id_to_token) -> List: # TODO: handle unks
+    """
+    Decompose a note sequence into a list of notes and rests
+    """
+    
+    if note_sequence[0] == START_OF_SEQUENCE_TOKEN:
+        # print("yes")
+        note_sequence = note_sequence[1:]
+    if note_sequence[-1] == END_OF_SEQUENCE_TOKEN:
+        note_sequence = note_sequence[:-1]
+    result = [[[], []]]
+    detokenized_result = [[[], []]]
+    # print("note:", note_sequence)
+    # print(note_sequence)
+    # print(token_to_id)
+    # print(id_to_token)
+    # input()
+    j = 0
+    for i in range(len(note_sequence)):
+        # print(note_sequence[i])
+        if note_sequence[i] == START_OF_SEQUENCE_TOKEN:
+            continue
+        # increment j if its a new onset: i is a note and i-1 is a rest or a non-tied note, edge case: i > 1 as you have sos at start
+        curr_tok = note_sequence[i]
+        prev_tok = note_sequence[i-1]
+        # if curr_tok == UNKNOWN_TOKEN:
+        #     j += 1
+        #     result += [[token_to_id[UNKNOWN_TOKEN]], [token_to_id[UNKNOWN_TOKEN]]]
+        #     detokenized_output += [[UNKNOWN_TOKEN], UNKNOWN_TOKEN]
+        #     continue 
+        try:
+            if not curr_tok.is_rest and i >= 1 and (prev_tok.is_rest or (not prev_tok.tied_forward and not prev_tok.is_rest)):
+                j += 1 
+                result += [[[], []]]
+                detokenized_result += [[[], []]]
+        except:
+            print(curr_tok)
+            input()
+        if not curr_tok.is_rest:
+            # result[j][0].append(note_sequence[i])
+            detokenized_result[j][0].append(curr_tok)
+        else:
+            # result[j][1].append(note_sequence[i])
+            detokenized_result[j][1].append(curr_tok)
+    return detokenized_result
 
 def convert_alignment(alignment):
     """

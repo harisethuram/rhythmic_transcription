@@ -1,7 +1,97 @@
 from music21 import converter, note
 import numpy as np
 from librosa import hz_to_note
+from fractions import Fraction
 
+
+def get_note_info_from_xml(xml_file_path: str, part_id: int):
+    """
+    returns list of tuples of (onset length, note portion, rest portion, pitch)
+    """
+    score = converter.parse(xml_file_path)
+    part = score.parts[part_id - 1]
+    note_lengths = [Fraction(element.duration.quarterLength) for element in part.flat.notesAndRests]
+    is_note = [isinstance(element, note.Note) for element in part.flat.notesAndRests]
+    pitches = [element.name if isinstance(element, note.Note) else None for element in part.flat.notesAndRests]
+    
+    # rests are technically 'tied' to the next rest
+    is_tied_forward = []
+    for i, element in enumerate(part.flat.notesAndRests):
+        if isinstance(element, note.Note):
+            is_tied_forward.append(element.tie is not None and element.tie.type in ("start", "continue"))
+            
+        # if it's a rest, if it isn't the last element, check if the next element is a rest. if so, it's tied forward
+        else:
+            if i < len(part.flat.notesAndRests) - 1:
+                is_tied_forward.append(isinstance(part.flat.notesAndRests[i + 1], note.Rest))
+            else:
+                is_tied_forward.append(False)
+                
+    
+    # now remove leading rests
+    while not is_note[0]:
+        note_lengths = note_lengths[1:]
+        is_note = is_note[1:]
+        pitches = pitches[1:]
+        is_tied_forward = is_tied_forward[1:]
+        
+    # now, merge tied forward notes
+    i = 0
+    while i < len(note_lengths):
+        # if it's a note and it's tied forward, merge it with the next note
+        if is_tied_forward[i]:
+            note_lengths[i + 1] += note_lengths[i]
+            note_lengths.pop(i)
+            pitches.pop(i)
+            is_note.pop(i)
+            is_tied_forward.pop(i)
+        else:
+            i += 1
+                
+    
+    # now convert to onset tuples
+    onset_lengths = []
+    onset_pitches = []
+    onset_note_portions = []
+    onset_rest_portions = []
+    curr_onset_length = 0
+    curr_onset_pitch = None
+    curr_note_length = 0
+    curr_rest_length = 0
+    for i in range(len(note_lengths)):
+        curr_onset_length += note_lengths[i]
+        if is_note[i]:
+            curr_note_length += note_lengths[i]
+            curr_onset_pitch = pitches[i]
+        else:
+            curr_rest_length += note_lengths[i]
+                    
+        if i+1 < len(note_lengths) and is_note[i + 1]:
+            assert curr_note_length + curr_rest_length == curr_onset_length
+            onset_lengths.append(curr_onset_length)
+            onset_pitches.append(curr_onset_pitch)
+            try:
+                onset_note_portions.append(Fraction(curr_note_length, curr_onset_length))
+            except:
+                print(curr_note_length, curr_onset_length, curr_onset_pitch)
+            onset_rest_portions.append(Fraction(curr_rest_length, curr_onset_length))
+            curr_onset_length = 0
+            curr_onset_pitch = None
+            curr_note_length = 0
+            curr_rest_length = 0
+
+    onset_lengths.append(curr_onset_length)
+    onset_pitches.append(curr_onset_pitch)
+    onset_note_portions.append(curr_note_length / curr_onset_length)
+    onset_rest_portions.append(curr_rest_length / curr_onset_length)
+    
+    result = []
+    for i in range(len(onset_lengths)):
+        result.append([float(onset_lengths[i]), float(onset_note_portions[i]), float(onset_rest_portions[i]), onset_pitches[i]])
+    return result            
+
+    
+    
 
 def midi_to_onsets(midi_file_path: str):
     """

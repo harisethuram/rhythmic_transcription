@@ -1,9 +1,10 @@
 input_path=$1
-output_path=$2
+output_dir=$2
+processed_data_dir=$3
 
 echo "mxl tokenization"
 
 python mxl_tokenizer.py \
     --input_path $input_path \
-    --output_path $output_path \
-    --processed_data_dir "processed_data/test_all" \
+    --output_dir $output_dir \
+    --processed_data_dir $processed_data_dir \

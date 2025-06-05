@@ -5,11 +5,12 @@ import json
 if __name__ == "__main__":
     lrs = ["1e-3", "1e-4", "1e-5"]
     batch_sizes = [32, 64, 128]
-    emb_size = [32, 64, 128]
-    hid_size = [64, 128, 256]
+    emb_size = [32, 64]
+    hid_size = [128, 256]
     
-    base_dir = "models/bach_fugues/pretrain_hparam_search"
+    base_dir = "output/presentation_results/models/barlines"
     best_hparam_setting = None
+    best_model_dir = None
     best_loss = float("inf")
     
     for lr in lrs:
@@ -22,6 +23,7 @@ if __name__ == "__main__":
                         loss_vals = json.load(f)
                         if loss_vals["best_val_loss"] < best_loss:
                             best_loss = loss_vals["best_val_loss"]
+                            best_model_dir = hparam_dir
                             best_hparam_setting = {
                                 "lr": lr,
                                 "batch_size": batch_size,
@@ -31,3 +33,4 @@ if __name__ == "__main__":
     
     print(f"Best hyperparameter setting: {best_hparam_setting}")
     print(f"Best validation loss: {best_loss}")
+    print(f"Best model directory: {best_model_dir}")

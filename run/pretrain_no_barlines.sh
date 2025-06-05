@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=barline_pretrain
-#SBATCH --partition=gpu-l40s
+#SBATCH --job-name=no_barline_pretrain
+#SBATCH --partition=gpu-l40
 #SBATCH --account=ark
 #SBATCH --nodes=1
 #SBATCH --mem=64G
@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=hsethu@uw.edu
-#SBATCH --output=/mmfs1/gscratch/ark/hari/rhythmic_trascription/out/bl_pretrain_%j.out
+#SBATCH --output=/mmfs1/gscratch/ark/hari/rhythmic_trascription/out/nbl_pretrain_%j.out
 
 
 lrs=(1e-3 1e-4 1e-5)
@@ -24,8 +24,8 @@ for lr in "${lrs[@]}"; do
             for hidden_size in "${hidden_sizes[@]}"; do
                 echo "Running pretrain with lr=$lr, batch_size=$batch_size, embed_size=$embed_size, hidden_size=$hidden_size"
                 python pretrain.py \
-                    --processed_data_dir "processed_data/all/barlines"\
-                    --output_dir "output/presentation_results/models/barlines/lr_$lr/b_size_$batch_size/emb_$embed_size/hid_$hidden_size" \
+                    --processed_data_dir "processed_data/all/no_barlines"\
+                    --output_dir "output/presentation_results/models/no_barlines/lr_$lr/b_size_$batch_size/emb_$embed_size/hid_$hidden_size" \
                     --embed_size $embed_size \
                     --hidden_size $hidden_size \
                     --num_layers 2 \
