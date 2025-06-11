@@ -1,4 +1,5 @@
 import music21
+from music21 import converter
 import json
 from typing import List, Dict
 import numpy as np
@@ -7,14 +8,13 @@ from fractions import Fraction
 from const_tokens import *
 from ..note.Note import Note
 
-def get_measure_lengths(score_path, part=0):
+def get_measure_lengths(score):
     """
     Get the lengths of measures from a score.
     :param score_path: Path to the score file.
     :return: List of measure lengths.
     """
     try:
-        score = converter.parse(score_path).parts[part]
         
         measure_lengths = set()
         
@@ -231,9 +231,10 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     error_output = ([], None)
     
     if want_measure_lengths:
-        measure_quarter_lengths = get_measure_lengths(part_name, part)
+        measure_quarter_lengths = get_measure_lengths(part)
         if measure_quarter_lengths is None or len(measure_quarter_lengths) != 1:
-            print("Error: Part is invalid, measure lengths are not consistent or not found.")
+            
+            print("Error: Part is invalid, measure lengths are not consistent or not found.", measure_quarter_lengths)
             return error_output
         
     
@@ -348,8 +349,6 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
     for i, bar_number in enumerate(bar_numbers):
         if i not in new_indices:
             missings.append(bar_number)
-    # print(new_indices)
-    # print(missings)
     
     polyphonic_bars = set()
     # check if any of the intervals overlap and if so, add the bar numbers to polyphonic_bars
@@ -358,16 +357,9 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
         if farthest[1] > unique_intervals_without_pitch[i][0]: # overlap
             polyphonic_bars |= set([j for j in range(unique_intervals_without_pitch[i][2], unique_intervals_without_pitch[i][3]+1)])
             polyphonic_bars |= set([j for j in range(farthest[2], farthest[3]+1)])
-            # print(unique_intervals_without_pitch[i], farthest, farthest[1], unique_intervals_without_pitch[i][0])
         
         if unique_intervals_without_pitch[i][1] > farthest[1]:
             farthest = unique_intervals_without_pitch[i]
-    # input()    
-    
-    # return error_output
-    # print(set(bar_numbers))
-    # print(len(bar_numbers))
-    # print("Polyphonic bars:", sorted(list(polyphonic_bars)))
     
     # now that we've accounted for all overlaps, we want to splice
     curr_splice = []
@@ -382,9 +374,6 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
             
     if curr_splice:
         all_splices.append(curr_splice)
-    # print("All splices:", all_splices)
-    # for splice in all_splices:
-    #     print("Splice:", bar_numbers[splice[0]], bar_numbers[splice[-1]])
         
     # remove leading rests
     if not want_leading_rests:
@@ -418,17 +407,6 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
                 curr_string = ""
         print("\"" + curr_string + "\"")
     
-    # for rhythm_and_expressions in all_rhythms_and_expressions:
-    #     print("first 20:")
-    #     # split print by barline
-    #     # curr_string = ""
-    #     print(print_with_barlines(rhythm_and_expressions[:20]))
-    #     print("last 20:")
-    #     print(print_with_barlines(rhythm_and_expressions[-20:]))
-    #     # print(rhythm_and_expressions[:20])
-    #     # print(rhythm_and_expressions[-20:])
-    #     input()
-    
     # finally, add start and end of sequence tokens and measure length tokens if flagged
     if want_measure_lengths:
         measure_length = measure_quarter_lengths.pop()
@@ -453,110 +431,6 @@ def get_rhythms_and_expressions(part, want_barlines: bool=False, no_expressions:
         rhythm_and_expressions.append(END_OF_SEQUENCE_TOKEN)
         
     return all_rhythms_and_expressions, sorted(list(polyphonic_bars))
-    # input()
-    # return error_output
-    
-    # fix splicing to include all different lists and remove leading rests and add barlines to each if necessary
-    
-    # # otherwise, discard the entire bar where polyphony is detected
-    # polyphonic_bars = set([bar_numbers[i] for i in polyphonic_idxs])
-    # # convert to sorted list
-    # polyphonic_bars = sorted(list(polyphonic_bars))
-    # print("Polyphonic bars:", polyphonic_bars)
-    
-    # if want_barlines:
-    #     rhythms_and_expressions, bar_numbers, offsets = add_barlines(rhythms_and_expressions, bar_numbers, offsets)
-    # # return [rhythms_and_expressions]
-    # # now we want to splice the part on these bars
-    # polyphonic_bar_pointer = 0    
-    
-    # new_rhythms_and_expressions = []
-    # curr_rhythms_and_expressions = []
-    # new_bar_numbers = []
-    # curr_bar_numbers = []
-    # new_pitches = []
-    # curr_pitches = []
-    # new_offsets = []
-    # curr_offsets = []
-    # new_ties = []
-    # curr_ties = []
-    # this is wrong
-    # for i, (bar_number)
-    
-    # for i, (bar_number, note, pitch, offset, tie) in enumerate(zip(bar_numbers, rhythms_and_expressions, pitches, offsets, ties)):
-    #     if polyphonic_bar_pointer < len(polyphonic_bars) and bar_number == polyphonic_bars[polyphonic_bar_pointer]:
-    #         if not curr_rhythms_and_expressions:
-    #             continue
-    #         new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
-    #         curr_rhythms_and_expressions = []
-    #         new_bar_numbers.append(curr_bar_numbers)
-    #         curr_bar_numbers = []
-    #         new_offsets.append(curr_offsets)
-    #         curr_offsets = []
-            
-    #         polyphonic_bar_pointer += 1
-    #         print("Splicing on bar", bar_number, polyphonic_bar_pointer)
-    #     else:
-    #         curr_rhythms_and_expressions.append(note)
-    #         curr_bar_numbers.append(bar_number)
-    #         curr_offsets.append(offset)            
-            
-            
-    # if curr_rhythms_and_expressions:
-    #     new_rhythms_and_expressions.append(curr_rhythms_and_expressions)
-    #     new_bar_numbers.append(curr_bar_numbers)
-    #     new_offsets.append(curr_offsets)
-
-    # new_rhythms_and_expressions = [merge_notes(rhythms_and_expressions, offsets) for rhythms_and_expressions, offsets in zip(new_rhythms_and_expressions, new_offsets)]
-
-    # # we also want to remove any leading rests
-    # if not want_leading_rests:
-    #     for i, rhythms_and_expressions in enumerate(new_rhythms_and_expressions):
-    #         first_note_idx = 0
-    #         for j, note in enumerate(rhythms_and_expressions):
-    #             if note != BARLINE_TOKEN and note.is_rest == False:
-    #                 first_note_idx = j
-    #                 break
-    #         new_rhythms_and_expressions[i] = rhythms_and_expressions[first_note_idx:]    
-    
-    # for rhythms_and_expressions in new_rhythms_and_expressions:
-    #     # add start of sequence token
-    #     rhythms_and_expressions.insert(0, START_OF_SEQUENCE_TOKEN)
-    #     # add end of sequence token
-    #     rhythms_and_expressions.append(END_OF_SEQUENCE_TOKEN)
-    
-    # return new_rhythms_and_expressions, polyphonic_bars
-    
-    
-    # finally, check for overlaps caused by tied notes. How can this edge case happen? If n1 of pitch p1 is tied to n2 of pitch p1, and there is n3 of pitch p3 at the same offset as n2, then there is polyphony. 
-    # Are there any other edge cases? i don't think so. This is quite complex actually lol, so maybe just discard the entire part if there is polyphony and tie. 
-    # first get a list of all tied note chains
-    # tied_note_chains = tie_chains_from_lists(ties, pitches)        
-    
-    # # now check if these tied chains differ
-    # for tied_note_chain in tied_note_chains:
-    #     other_notes = [offset_to_idxs[offset[i]] for i in tied_note_chain]
-    #     lens = [len(other_note) for other_note in other_notes]
-    #     if len(set(lens)) > 1:
-    #         # there is polyphony, so we want to add all notes in the tied chain and other shared notes to polyphonic_idxs
-    #         pass
-    
-    
-    # offset_list = [(offset, list(notes)[0]) for offset, notes in offsets.items()]
-    # offset_list.sort(key=lambda x: x[0])
-    
-    # we want to check if there is any polyphony caused by overlapping notes i.e. earlier note ends after later note starts
-    # for i in range(1, len(offset_list)):
-    #     if offset_list[i][0] < offset_list[i-1][0] + offset_list[i-1][1].get_len():
-    #         # if debug:
-    #         #     print("Polyphony detected!")
-    #         #     print(f"Notes at {offset_list[i][0]}:", offset_list[i][1])
-    #         #     print(f"Notes at {offset_list[i-1][0]}:", offset_list[i-1][1])
-    #         #     print("Bar number:", part.flat.notesAndRests[i].measureNumber)
-    #         return None
-        
-    # if debug:
-    #     print("Rhythms and expressions:", offsets)
 
 def add_barlines(rhythms_and_expressions, bar_numbers, offsets):
     """

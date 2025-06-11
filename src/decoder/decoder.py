@@ -31,24 +31,27 @@ class Decoder(nn.Module):
         self.base_value = Fraction.from_float(base_value)
         self.unk_score = unk_score
 
-    def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, debug: bool=False) -> List[int]: # TODO: make sure to output detokenized also in case of flattened
+    def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, want_all_candidates: bool=False, debug: bool=False) -> List[int]: # TODO: make sure to output detokenized also in case of flattened
         """
         Decodes the given note info using the specified decoding method.
         note_info: List of length 3 (or 4) arrays: [quantized_length, note_portion, rest_portion, pitch (optional)]
         decode_method: Decoding method to use, one of ['greedy', 'beam_search']
         flatten: If False, returns a list of lists, where each sublist corresponds to an onset. If True, returns a flat list of tokens.
+        want_all_candidates: If True, returns all beam_width candidates of the beam search, otherwise returns only the best candidate.
         """
         if decode_method == "greedy":
             out = self._greedy_decode(note_info, debug=debug)
         elif decode_method == "beam_search":
-            out = self._beam_search(note_info, debug=debug)
+            out = self._beam_search(note_info, want_all_candidates=want_all_candidates, debug=debug)
         else:
             raise ValueError(f"Invalid decode method: {decode_method}, must be one of ['greedy', 'beam_search']") 
         
         if flatten:
             return out
         # for testing
-        result, detokenized_result = decompose_note_sequence(out, self.token_to_id, self.id_to_token)
+        all_result = [decompose_note_sequence(o, self.token_to_id, self.id_to_token) for o in out]
+        result = [item[0] for item in all_result]
+        detokenized_result = [item[1] for item in all_result]
         print("result:", result, len(result))
         if debug:
             print("Flat:", out)
@@ -56,7 +59,7 @@ class Decoder(nn.Module):
             input()
         return result, detokenized_result
             
-    def _beam_search(self, note_info: List, debug=False):
+    def _beam_search(self, note_info: List, want_all_candidates: bool=False, debug=False):
         def to_help(tensor):
             return tensor.to(self.language_model.device).to(torch.int64)
         
@@ -179,9 +182,13 @@ class Decoder(nn.Module):
                 hidden_states = new_hidden_states
                 cell_states = new_cell_states
         # return the best beam
-        best_beam = np.argmax([i.item() for i in beam_log_probs])
-        ans = prefixes[best_beam].tolist()
-        print("ans:", ans, len(ans))
+        if want_all_candidates:
+            ans = []
+            for prefix, log_prob in zip(prefixes, beam_log_probs):
+                ans.append(prefix.tolist())
+        else:
+            best_beam = np.argmax([i.item() for i in beam_log_probs])
+            ans = [prefixes[best_beam].tolist()]
         return ans
     
     

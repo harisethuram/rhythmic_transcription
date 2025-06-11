@@ -1,6 +1,12 @@
+echo $1
+echo $2
+echo $3
+echo $4
+echo $5
+
 python add_barlines.py \
-    --model_path "models/test/barlines/model.pth" \
+    --model_path "$4" \
     --input_path "$1" \
-    --data_dir "processed_data/all/barlines" \
+    --data_dir "$5" \
     --output_path "$2" \
     --note_info_path "$3" \

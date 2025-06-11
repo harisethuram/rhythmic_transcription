@@ -8,7 +8,7 @@ if __name__ == "__main__":
     emb_size = [32, 64]
     hid_size = [128, 256]
     
-    base_dir = "output/presentation_results/models/barlines"
+    base_dir = "output/presentation_results/models/no_barlines"
     best_hparam_setting = None
     best_model_dir = None
     best_loss = float("inf")
@@ -30,6 +30,7 @@ if __name__ == "__main__":
                                 "emb_size": emb,
                                 "hid_size": hid
                             }
+                            print("best_loss", best_loss)
     
     print(f"Best hyperparameter setting: {best_hparam_setting}")
     print(f"Best validation loss: {best_loss}")

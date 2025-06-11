@@ -69,8 +69,9 @@ def add_barlines(input_sequence, pitches, token_to_id, id_to_token, beats_per_ba
             
             curr = start_end[i]
             if pitches[i] is None and not curr[3].is_rest:
+                print("Line 70 error")
                 print(curr, offset, beats_per_bar, m)
-                input()
+                # input()
             start_end.pop(i)
             start_end.insert(i, (curr[0], m, True, Note(string=str(curr[3]))))
             start_end.insert(i + 1, (m, curr[1], False, Note(string=str(curr[3]))))
@@ -152,8 +153,8 @@ def add_barlines(input_sequence, pitches, token_to_id, id_to_token, beats_per_ba
     final_result = [token_to_id[note] if note in token_to_id.keys() else token_to_id[UNKNOWN_TOKEN] for note in result_notes]
     final_result_pitches = [final_result_pitches[i] if final_result[i] != token_to_id[UNKNOWN_TOKEN] else None for i in range(len(final_result))] # add a None wherever there is an unknown token
     
-    final_result = [token_to_id[START_OF_SEQUENCE_TOKEN]] + final_result + [token_to_id[END_OF_SEQUENCE_TOKEN]]
-    final_result_pitches = [None] + final_result_pitches + [None]
+    final_result = [token_to_id[START_OF_SEQUENCE_TOKEN], token_to_id[QUARTER_LENGTHS[beats_per_bar]]] + final_result + [token_to_id[END_OF_SEQUENCE_TOKEN]]
+    final_result_pitches = [None, None] + final_result_pitches + [None]
     # if unk:
     #     print("Unknown token found in the sequence")
         # print(f"Result notes: {result_notes}")
@@ -183,8 +184,9 @@ def main():
     output_dir = "/".join(args.model_path.split("/")[:-1])
     os.makedirs(output_dir, exist_ok=True)
     
-    token_to_id, id_to_token, _ = open_processed_data_dir("processed_data/all/barlines")
-    
+    token_to_id, id_to_token, _ = open_processed_data_dir(args.data_dir)
+    # print(token_to_id)
+    # input()
     flattened_notes, flattened_pitches = flatten_notes(args.input_path, args.note_info_path)
     
         
@@ -211,8 +213,10 @@ def main():
 
             # print(f"Trying beats per bar: {beats_per_bar}, offset: {offset}")
             output_sequence, pitches = add_barlines(input_sequence, input_pitches, token_to_id, id_to_token, beats_per_bar, offset)
+            # print([id_to_token[k] for k in output_sequence[:20]], pitches[:20])
             # print([(id_to_token[s], p) for s, p in zip(output_sequence[:20], pitches[:20])])
             # input()
+            # print(output_sequence)
             output_sequence = torch.Tensor(output_sequence).to(DEVICE).long()
             output, _ = model(output_sequence)
             output = output[:-1, ...]
@@ -221,21 +225,27 @@ def main():
             
             # compute the log likelihood
             ll = torch.log_softmax(output, dim=-1)
-            output_sequence = output_sequence[1:]
-            ll = torch.gather(ll, 1, output_sequence.unsqueeze(1).to(torch.int64)).squeeze().sum().item()
+            ll = torch.gather(ll, 1, output_sequence[1:].unsqueeze(1).to(torch.int64)).squeeze().sum().item()
             if ll > highest_ll:
                 highest_ll = ll
                 best = (beats_per_bar, offset)
                 best_output_sequence = output_sequence
                 best_pitches = pitches
-    print(best_output_sequence)
-    print(best_pitches)
+    
+    # print([id_to_token[b] for b in best_output_sequence.tolist()[:20]])
+    # print(best_pitches[:20])
+    best_output_sequence = [id_to_token[b] for b in best_output_sequence.tolist()[2:-1]]
+    best_pitches = best_pitches[2:-1]
+    # print(best_output_sequence)
+    # print(best_pitches)
+    # print(len(best_output_sequence), len(best_pitches))
+    # input()
     best_output = {
         "beats_per_bar": best[0],
         "offset": best[1],
         "log_likelihood": highest_ll, 
-        "sequence": [id_to_token[b] for b in best_output_sequence.tolist()[:-1]],
-        "pitches": best_pitches[1:-1],
+        "sequence": best_output_sequence,
+        "pitches": best_pitches,
     }
     print(f"Best beats per bar: {best[0]}, offset: {best[1]}, log likelihood: {highest_ll}")
     # save to output directory

@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_limit", type=int, default=100000, help="The number of files to process for testing")
     parser.add_argument("--debug", action="store_true", help="Whether or not to print debug information.")
     parser.add_argument("--unk_threshold", type=int, default=100, help="The frequency threshold below which a token is considered unknown.")
+    parser.add_argument("--want_measure_lengths", action="store_true", help="Whether or not to include measure lengths in the output.")
     args = parser.parse_args()
     
     random.seed(0)
@@ -60,7 +61,7 @@ if __name__ == "__main__":
             for i, part in enumerate(parts):
                 corrupted = False
                 try:
-                    tmp_parts, polyphonic_bars = get_rhythms_and_expressions(part, args.want_barlines, args.no_expressions) # a list of lists of notes
+                    tmp_parts, polyphonic_bars = get_rhythms_and_expressions(part, want_barlines=args.want_barlines, no_expressions=args.no_expressions, want_measure_lengths=args.want_measure_lengths) # a list of lists of notes
                 except Exception as e:
                     tmp_parts = []
                     polyphonic_bars = None
@@ -102,7 +103,6 @@ if __name__ == "__main__":
     print(f"Number of corrupt parts: {num_corrupt_parts}/{total_num_parts} ({num_corrupt_parts/total_num_parts*100:.2f}%)")
     print(f"Number of corrupted files: {num_corrupt_files}/{total_num_files} ({num_corrupt_files/total_num_files*100:.2f}%)")
     # remove all files with no useful parts
-    # get_rhythms_and_expressions = {k: v for k, v in all_rhythms_and_expressions.items() if len(v) > 0}
     
     # get all unique note tokens
     
