@@ -5,8 +5,18 @@ class Note:
     """
     Abstraction of note tuple, for easier attribute access
     """
-    def __init__(self, duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False, string=None, tple=None):
-        if string is not None: # in form of "Note(duration=_, dotted=_, triplet=_, fermata=_, staccato=_, tied_forward=_, is_rest=_)"
+    def __init__(self, duration=1, dotted=False, triplet=False, fermata=False, staccato=False, tied_forward=False, is_rest=False, string=None, tple=None, note=None):
+        if note is not None:
+            if not isinstance(note, Note):
+                raise ValueError(f"Expected note to be of type Note, got {type(note)}")
+            self.duration = note.duration
+            self.dotted = note.dotted
+            self.triplet = note.triplet
+            self.fermata = note.fermata
+            self.staccato = note.staccato
+            self.tied_forward = note.tied_forward
+            self.is_rest = note.is_rest
+        elif string is not None: # in form of "Note(duration=_, dotted=_, triplet=_, fermata=_, staccato=_, tied_forward=_, is_rest=_)"
             string = string[6:-1]
             string = string.split(", ")
             def clean(s):
