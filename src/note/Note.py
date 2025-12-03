@@ -1,5 +1,10 @@
 from fractions import Fraction
 import json
+from music21.expressions import Fermata
+from music21.articulations import Staccato
+from music21 import note as m21note
+from music21 import duration as m21duration
+from music21 import tie as m21tie
 
 class Note:
     """
@@ -48,8 +53,86 @@ class Note:
             self.tied_forward = tied_forward
             self.is_rest = is_rest
         
+    @staticmethod
+    def from_string(string: str):
+        string = string[6:-1]
+        string = string.split(", ")
+        def clean(s):
+            return s.split("=")[1]
+        string = [clean(s) for s in string]
+        if len(string) != 7:
+            raise ValueError(f"Invalid string: {string}")
+        return Note(
+            duration=Fraction(string[0]),
+            dotted=string[1] == "True",
+            triplet=string[2] == "True",
+            fermata=string[3] == "True",
+            staccato=string[4] == "True",
+            tied_forward=string[5] == "True",
+            is_rest=string[6] == "True"
+        )
+
+    @staticmethod
+    def from_tuple(tple: tuple):
+        if len(tple) != 7:
+            raise ValueError(f"Invalid tuple: {tple}")
+        return Note(
+            duration=tple[0],
+            dotted=tple[1],
+            triplet=tple[2],
+            fermata=tple[3],
+            staccato=tple[4],
+            tied_forward=tple[5],
+            is_rest=tple[6]
+        )
         
+    def copy(self):
+        return Note(
+            duration=self.duration,
+            dotted=self.dotted,
+            triplet=self.triplet,
+            fermata=self.fermata,
+            staccato=self.staccato,
+            tied_forward=self.tied_forward,
+            is_rest=self.is_rest
+        )
         
+    def get_music21_event(self, pitch):
+        
+        dur = m21duration.Duration(float(self.duration))
+        if self.dotted:
+            dur.dots = 1
+        if self.triplet:
+            tup = m21duration.Tuplet(3, 2)
+            dur.appendTuplet(tup)
+        
+        if self.is_rest:
+            n = m21note.Rest()
+        else:
+            n = m21note.Note(pitch)
+            # need to add articulations
+        n.duration = dur
+        
+        if not self.is_rest:
+            if self.fermata:
+                n.expressions.append(Fermata())
+            if self.staccato:
+                n.articulations.append(Staccato())
+            if self.tied_forward:
+                n.tie = m21tie.Tie('start')
+        # account for dot
+        # if self.dotted:
+        #     n.duration.dots = 1
+            
+        # # account for triplet
+        # if self.triplet:
+        #     tup = m21duration.Tuplet(3, 2)
+        #     n.duration.appendTuplet(tup)
+            
+        return n
+            
+        
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Note):
             return False
@@ -58,8 +141,10 @@ class Note:
     def compare_without_expressions(self, other):
         return self.duration == other.duration and self.dotted == other.dotted and self.triplet == other.triplet and self.is_rest == other.is_rest and self.tied_forward == other.tied_forward
 
-    def get_len(self):
-        return Fraction(self.duration) * (Fraction(3, 2) if self.dotted else 1) * (Fraction(2, 3) if self.triplet else 1)
+    def get_len(self, include_triplet=True):
+        val = Fraction(self.duration) * (Fraction(3, 2) if self.dotted else 1) 
+        trip = (Fraction(2, 3) if self.triplet else 1) if include_triplet else 1
+        return val * trip
         
     def __str__(self):
         return f"Note(duration={self.duration}, dotted={self.dotted}, triplet={self.triplet}, fermata={self.fermata}, staccato={self.staccato}, tied_forward={self.tied_forward}, is_rest={self.is_rest})" 

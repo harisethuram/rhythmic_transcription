@@ -28,6 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Whether or not to print debug information.")
     parser.add_argument("--unk_threshold", type=int, default=100, help="The frequency threshold below which a token is considered unknown.")
     parser.add_argument("--want_measure_lengths", action="store_true", help="Whether or not to include measure lengths in the output.")
+    parser.add_argument("--want_elucidation", action="store_true", help="Whether or not to have every single note elucidated in the tokenizer.")
     args = parser.parse_args()
     
     random.seed(0)
@@ -56,7 +57,7 @@ if __name__ == "__main__":
                 num_corrupt_files += 1
                 continue
             all_rhythms_and_expressions[os.path.join(dataset, file)] = {}
-            print("path:", os.path.join(dataset, file))
+            # print("path:", os.path.join(dataset, file))
             part_counter = 0
             for i, part in enumerate(parts):
                 corrupted = False
@@ -92,12 +93,12 @@ if __name__ == "__main__":
                 #     print("...")
                 #     for j in end:
                 #         print(j)
-                print(f"num spliced parts for {os.path.join(dataset, file)} - {i}:", len(tmp_parts))
+                # print(f"num spliced parts for {os.path.join(dataset, file)} - {i}:", len(tmp_parts))
                 # if len(tmp_parts) > 0 and "offering-001" in os.path.join(dataset, file):
                 #     print(tmp_parts[0])
                 #     print("path again:", os.path.join(dataset, file))
-                # in`put()
-                
+                # input()
+
                 # input()
     print(f"Number of useless parts: {num_useless_parts}/{total_num_parts} ({num_useless_parts/total_num_parts*100:.2f}%)")
     print(f"Number of corrupt parts: {num_corrupt_parts}/{total_num_parts} ({num_corrupt_parts/total_num_parts*100:.2f}%)")
@@ -112,9 +113,9 @@ if __name__ == "__main__":
             for note in part:
                 unique_note_tokens.add(note)
     
-    token_to_id, id_to_token = get_base_tokenizer_dicts(args.want_barlines, args.no_expressions)
+    token_to_id, id_to_token = get_base_tokenizer_dicts(args.want_barlines, args.no_expressions, args.want_elucidation)
     print("Base tokenizer dicts created.")
-    print(id_to_token)
+    # print(id_to_token)
     
     # train stats
     
@@ -150,20 +151,23 @@ if __name__ == "__main__":
                     
     
     # remove tokens with frequency below unk_threshold
-    filtered_train_frequencies = {k: v for k, v in train_frequencies.items() if v > args.unk_threshold}
-    
-    print(f"Number of tokens with frequency below threshold ({args.unk_threshold}):", len(train_frequencies) - len(filtered_train_frequencies), "out of", len(train_frequencies))
-    filtered_train_frequencies[UNKNOWN_TOKEN] = sum([v for k, v in train_frequencies.items() if v <= args.unk_threshold])
+    if args.want_elucidation:
+        # if we want elucidation, we don't filter out any tokens
+        filtered_train_frequencies = train_frequencies
+    else:
+        filtered_train_frequencies = {k: v for k, v in train_frequencies.items() if v > args.unk_threshold}
+        print(f"Number of tokens with frequency below threshold ({args.unk_threshold}):", len(train_frequencies) - len(filtered_train_frequencies), "out of", len(train_frequencies))
+        filtered_train_frequencies[UNKNOWN_TOKEN] = sum([v for k, v in train_frequencies.items() if v <= args.unk_threshold])
     
     max_id = max(token_to_id.values())
-    count = max_id + 1
+    token_id_count = max_id + 1
     
     for token in filtered_train_frequencies.keys():
         if token not in token_to_id.keys():
-            # token_to_id[token] = count
-            token_to_id[token] = count
-            id_to_token[count] = token
-            count += 1
+            # token_to_id[token] = token_id_count
+            token_to_id[token] = token_id_count
+            id_to_token[token_id_count] = token
+            token_id_count += 1
             
     if args.debug:
         print("token_to_id:")

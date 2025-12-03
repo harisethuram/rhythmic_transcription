@@ -1,1 +1,0 @@
-# TODO: generate a fake perfect linear fit to isolate the performance of the decoding algorithm

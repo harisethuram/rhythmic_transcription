@@ -14,7 +14,7 @@ import sys
 from src.decoder.decoder import Decoder
 from src.utils import serialize_json, decompose_note_sequence, convert_alignment, open_processed_data_dir
 from src.note.Note import Note
-from const_tokens import *
+from src.const_tokens import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

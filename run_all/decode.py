@@ -7,25 +7,30 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run all decoding")
-    parser.add_argument("chunk", type=int, help="Chunk number to run")
+    parser.add_argument("--chunk", type=int, default=0, help="Chunk number to run")
+    parser.add_argument("--model_path", type=str, default="output/presentation_results/models/no_barlines/lr_1e-3/b_size_32/emb_32/hid_256/model.pth")
+    parser.add_argument("--root_result_dir", type=str)
+    parser.add_argument("--want_mixing", action="store_true", help="Whether to run mixing")
+    parser.add_argument("--processed_data_dir", type=str)
     args = parser.parse_args()
     data = pd.read_csv("metadata/URMP/metadata.csv")
     
     errors = {}
-    root_result_dir = "output/presentation_results/ablations/perfect_piecewise/decode"
-    base_values = [1]
+    root_result_dir = args.root_result_dir
+    # root_result_dir = "output/presentation_results/test/does_lm_decode_work/mix/{piece}/{base_value}"
+    base_values = [0.25, 0.5, 1, 2, 3, 4]  # base values to test
     # base_values = [2, 4]
     methods = ["beam_search"]
     test_lim = 10000
-    base_note_info_dir = "output/presentation_results/ablations/perfect_piecewise/piecewise"
-    processed_data_dir = "processed_data/all/no_barlines"
+    base_note_info_dir = "output/presentation_results/piecewise/{piece}/note_info.json"
+    # processed_data_dir = "processed_data/all/no_barlines"
     all_results = {}
     default_high = 10000
     
     data = data[data["split"] == "val"]
     
-    full_length = len(data)
-    num_chunks = 8
+    full_length = len(data) 
+    num_chunks = 1
     chunk_size = len(data) // num_chunks
     chunks = [data.iloc[i:i+chunk_size] for i in range(0, len(data), chunk_size)]
     data = chunks[args.chunk]
@@ -49,15 +54,18 @@ if __name__ == "__main__":
                 
                 print(f"Running {base_value} beam_search on {row['piece_id']}_{row['piece_name']}_{row['part_id']}")
                 curr_dir = f"{row['piece_id']}_{row['piece_name']}_{row['part_id']}"
-                note_info_path = os.path.join(base_note_info_dir, curr_dir + ".json")
-                output_dir = os.path.join(root_result_dir, curr_dir)
+                note_info_path = base_note_info_dir.format(piece=curr_dir)
+                output_dir = root_result_dir.format(piece=curr_dir, base_value=base_value)
+                if os.path.exists(os.path.join(output_dir, "output.json")):
+                    print("skipping")
+                    continue
                 # score_path = os.path.join(processed_data_dir, f"{row['piece_id']}_{row['piece_name']}.json")
                 # part_id = str(row["part_id"])
                 # if os.path.exists(os.path.join(output_dir, "results.json")):
                 #     print("skipping")
                 #     continue
                 # alignment_path = os.path.join(base_note_info_dir, curr_dir, "alignment.json")
-                subprocess.call(["bash", "run/decode.sh", note_info_path, output_dir, str(base_value)])
+                subprocess.call(["bash", "run/decode.sh", note_info_path, output_dir, str(base_value), args.model_path, str(args.want_mixing), args.processed_data_dir])
                     
                 # get best base value
                 # results_path = os.path.join(output_dir, "results.json")

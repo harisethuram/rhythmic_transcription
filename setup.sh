@@ -1,0 +1,1 @@
+export PATH="/mmfs1/gscratch/ark/hari/rhythmic_trascription/lilypond-2.25.30/bin:$PATH"

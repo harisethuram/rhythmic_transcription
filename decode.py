@@ -12,9 +12,9 @@ from tqdm import tqdm
 import sys
 
 from src.decoder.decoder import Decoder
-from src.utils import serialize_json, decompose_note_sequence, convert_alignment
+from src.utils import serialize_json, decompose_note_sequence, convert_alignment, open_processed_data_dir
 from src.note.Note import Note
-from const_tokens import *
+from src.const_tokens import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--beam_width", type=int, default=5, help="Beam width for beam search")
     # parser.add_argument("--temperature", type=float, default=1.0, help="Temperature for sampling") # TODO: get rid of this
     parser.add_argument("--base_value", type=float, default=1.0, help="What length a quarter note corresponds to")
+    parser.add_argument("--want_mixing", type=str, default="False", help="Whether to run mixing or not. If set to 'True', the output will be mixed with the channel model. If set to 'False', the output will not be mixed.")
     # parser.add_argument("--eval", action="store_true", help="Evaluate the model")
     # parser.add_argument("--score_path", type=str, default=None, help="Path to the tokenized json file, only required if eval is true")
     # parser.add_argument("--score_part_id", type=int, default=None, help="Part ID of the score, only required if eval is true")
@@ -35,6 +36,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     print(args)
+    want_mixing = args.want_mixing.lower() == "true"
     warnings.filterwarnings("ignore")  # Suppress UserWarnings
     language_model = torch.load(args.language_model_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,17 +46,20 @@ if __name__ == "__main__":
     else:
         channel_model = None
     
-    with open(os.path.join(args.processed_data_dir, "token_to_id.pkl"), "rb") as f:
-        token_to_id = pkl.load(f)
-    with open(os.path.join(args.processed_data_dir, "id_to_token.pkl"), "rb") as f:
-        id_to_token = pkl.load(f)
+    # with open(os.path.join(args.processed_data_dir, "token_to_id.pkl"), "rb") as f:
+    #     token_to_id = pkl.load(f)
+    # with open(os.path.join(args.processed_data_dir, "id_to_token.pkl"), "rb") as f:
+    #     id_to_token = pkl.load(f)
+    token_to_id, id_to_token, _ = open_processed_data_dir(args.processed_data_dir)
     with open(args.note_info_path, "r") as f:
         note_info = json.load(f)
     
-    id_to_token = {tok_id: (Note(tple=token) if type(token) == tuple else token) for tok_id, token in id_to_token.items()}
-    token_to_id = {(Note(tple=token) if type(token) == tuple else token): tok_id for token, tok_id in token_to_id.items()}
-      
-    decoder = Decoder(language_model, channel_model, token_to_id, id_to_token, args.beam_width, args.base_value)
+    # id_to_token = {tok_id: (Note(tple=token) if type(token) == tuple else token) for tok_id, token in id_to_token.items()}
+    # token_to_id = {(Note(tple=token) if type(token) == tuple else token): tok_id for token, tok_id in token_to_id.items()}
+    
+    alpha = 1/20 if want_mixing else 1
+    
+    decoder = Decoder(language_model, channel_model, token_to_id, id_to_token, args.beam_width, args.base_value, alpha=alpha)
     
 
     output, detokenized_output = decoder.decode(note_info=note_info, decode_method=args.decode_method, flatten=False, debug=args.debug)

@@ -469,9 +469,10 @@ def merge_notes(rhythms_and_expressions, offsets):
     return new_rhythms_and_expressions
 
 
-def get_base_tokenizer_dicts(want_barlines=False, no_expressions=True):
+def get_base_tokenizer_dicts(want_barlines=False, no_expressions=True, want_elucidation=False):
     """
-    Creates base tokenizer dictionary without any actual notes
+    Creates base tokenizer dictionary without any actual notes (unless want_elucidation is True).
+    If want_elucidation is True it will return a dictionary of size ~3100, i.e. 8 * 2**9
     """
     
     # Generate all possible combinations of note properties
@@ -499,6 +500,29 @@ def get_base_tokenizer_dicts(want_barlines=False, no_expressions=True):
     if want_barlines:
         token_to_id[BARLINE_TOKEN] = count
         count += 1
+    
+    tf = [True, False]
+    if want_elucidation:
+        # note length range: 2 * i where i in [-5, 3]
+        for i in range(-5, 4):
+            for dotted in tf:
+                for triplet in tf:
+                    for fermata in tf:
+                        for staccato in tf:
+                            for tied_forward in tf:
+                                for is_rest in tf:
+                                    note = Note(
+                                        duration=Fraction(2**i),
+                                        dotted=dotted,
+                                        triplet=triplet,
+                                        fermata=fermata,
+                                        staccato=staccato,
+                                        tied_forward=tied_forward,
+                                        is_rest=is_rest
+                                    )
+                                    token = str(note)
+                                    token_to_id[token] = count
+                                    count += 1
     
     id_to_token = {v: k for k, v in token_to_id.items()}
     

@@ -174,8 +174,14 @@ def main():
     parser.add_argument("--output_path", type=str, help="Path to output directory")
     args = parser.parse_args() 
     
-    tmp = json.load(open(args.note_info_path, "r"))
-    tmp_input = json.load(open(args.input_path, "r"))
+    # tmp = json.load(open(args.note_info_path, "r"))
+    safe_globals = {"__builtins__": None, "Note": Note}
+    with open(args.note_info_path, "r") as f:
+        tmp = json.load(f)
+    tmp_input = json.load(open(args.input_path, "r"))[0]
+    tmp_input = eval(tmp_input, safe_globals)
+    # print(len(tmp), len(tmp_input))
+    # print(tmp_input[0][0][0].duration, tmp_input[0][0][0].dotted)
     assert len(tmp) == len(tmp_input) # this must hold, otherwise we can't really evaluate later on.
     os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
     # Load

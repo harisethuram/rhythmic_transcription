@@ -165,18 +165,56 @@ def get_performance_pitches(input_path):
         pitches = np.array([float(line.split("\t")[2]) for line in f.readlines()])
         return freq_to_note(pitches)
 
+def hz_to_note_name(frequency):
+    """
+    takes in a frequency and returns the note name
+    """
+    note_name = hz_to_note(frequency)
+    note_name = note_name.replace("♯", "#").replace("♭", "b")
+    return note_name
 
 def freq_to_note(frequencies):
     """
     takes in a list of frequencies and returns a list of note names
     """
-    note_names = []
-    for freq in frequencies:
-        note_names.append(hz_to_note(freq))
-    note_names = [note_name.replace("♯", "#") for note_name in note_names]
-    note_names = [note_name.replace("♭", "b") for note_name in note_names]
-    return note_names
+        
+    return [hz_to_note_name(freq) for freq in frequencies]
 
+
+
+def read_note_text_file(input_path):
+    """
+    takes in a text file path and returns two lists, of event lengths, and pitches, and is_note
+    """
+    event_lengths = []
+    pitches = []
+    is_note = []
+    
+    with open(input_path, 'r') as f:
+        lines = f.readlines()
+        processed_lines = [[float(col) for col in line.strip().split("\t") if col != ''] for line in lines]
+        onsets = np.array([line[0] for line in processed_lines])
+        # print(processed_lines[0])
+        onset_lengths = onsets[1:] - onsets[:-1]
+        raw_pitches = [line[1] for line in processed_lines]
+        sound_lengths = np.array([line[2] for line in processed_lines])
+        rest_lengths = onset_lengths - sound_lengths[:-1]
+        for i in range(len(sound_lengths)-1):
+            event_lengths.append(sound_lengths[i])
+            pitches.append(hz_to_note_name(raw_pitches[i]))
+            is_note.append(True)
+            if rest_lengths[i] > 0:
+                event_lengths.append(rest_lengths[i])
+                pitches.append(None)
+                is_note.append(False)
+        event_lengths.append(sound_lengths[-1])
+        pitches.append(hz_to_note_name(raw_pitches[-1]))
+        is_note.append(True)
+    # print(len(event_lengths), len(pitches), len(is_note))
+    # print(event_lengths)
+    # print(len([n for n in is_note if n]))
+    # print(pitches)
+    return list(event_lengths), pitches, is_note
 
 
 # Example usage:

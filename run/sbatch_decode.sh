@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=e2e_decode
-#SBATCH --partition=gpu-l40s
+#SBATCH --job-name=mix_decode
+#SBATCH --partition=gpu-a40
 #SBATCH --account=ark
 #SBATCH --nodes=1
 #SBATCH --mem=64G

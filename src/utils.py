@@ -34,15 +34,15 @@ def get_measure_lengths(score_path):
         print(f"Error processing {score_path}: {e}")
         return None
 
-def flatten_notes(path, note_info_path=None):
+def flatten_notes(path, note_info_path=None): # TODO: issue with some json where all onsets are put into one string :O
     """
     Takes in path to decomposed notes and flattens them into a single list. If provided note_info_path, also returns list of aligned pitches.
     """
     safe_globals = {"__builtins__": None, "Note": Note}
     with open(path, "r") as f:
-        notes = json.load(f)
-        notes = [eval(note) for note in notes]
-    
+        notes = json.load(f)[0]
+        notes = eval(notes, safe_globals)
+
     pitches = [None] * len(notes)
     
     if note_info_path is not None:
@@ -50,7 +50,7 @@ def flatten_notes(path, note_info_path=None):
 
     results = []
     result_pitches = []
-    assert len(notes) == len(pitches)
+    assert len(notes) == len(pitches), f"len of notes: {len(notes)}, len of pitches: {len(pitches)}"
     for (curr_notes, curr_rests), pitch in zip(notes, pitches):
         curr_notes_Note = [Note(string=str(note)) for note in curr_notes]
         curr_notes_pitches = [pitch] * len(curr_notes_Note)
@@ -58,7 +58,8 @@ def flatten_notes(path, note_info_path=None):
         curr_rests_pitches = [None] * len(curr_rests_Note)
         results += curr_notes_Note + curr_rests_Note
         result_pitches += curr_notes_pitches + curr_rests_pitches
-    assert len(results) == len(result_pitches)
+    # print(f"len of results: {len(results)}, len of result_pitches: {len(result_pitches)}")
+    assert len(results) == len(result_pitches), f"len of results: {len(results)}, len of result_pitches: {len(result_pitches)}"
     return results, result_pitches
 
 
@@ -83,21 +84,68 @@ def serialize_json(obj, indent=4, current_indent=0):
         return json.dumps(str(obj))
     
 
-def get_note_and_length_to_token_id_dicts(id_to_token):
+def get_tokens_given_length(id_to_token, query, want_rest: bool, cache=None):
     """
-    Given the id_to_token dictionary, returns a dictionary of note length to note tokens and rest length to rest tokens. 
-    We consider up to two tied notes and two consecutive rests for a single length.
-    """
+    Returns a list of lists, where each sublist contains the token ids of notes or rests (depending on `want_rest`) of a length 'query'. 
+    Also returns a cache that you can pass in during future calls to avoid recomputation. Replaces function 'get_note_and_length_to_token_id_dicts'.
+    """     
+    if cache is not None:
+        len_to_tied_forward_notes, len_to_non_tied_notes, len_to_rests, note_length_to_token_ids, rest_length_to_token_ids = cache
+    else:
+        len_to_tied_forward_notes = {}
+        len_to_non_tied_notes = {}
+        len_to_rests = {}
+        note_length_to_token_ids = {}
+        rest_length_to_token_ids = {}
+        
+        for token_id, token in id_to_token.items():
+            if token in CONST_TOKENS:
+                continue
+            curr_len = token.get_len()
+            
+            if token.is_rest:
+                len_to_rests[curr_len] = len_to_rests.get(curr_len, []) + [token_id]
+            else:
+                if token.tied_forward:
+                    len_to_tied_forward_notes[curr_len] = len_to_tied_forward_notes.get(curr_len, []) + [token_id]
+                else:
+                    len_to_non_tied_notes[curr_len] = len_to_non_tied_notes.get(curr_len, []) + [token_id]
+                    
+    # zero case, return empty list
+    if query == 0:
+        return [], (len_to_tied_forward_notes, len_to_non_tied_notes, len_to_rests, note_length_to_token_ids, rest_length_to_token_ids)
+    # try to see if it already exists
+    query_dict = rest_length_to_token_ids if want_rest else note_length_to_token_ids
+    if query in query_dict:
+        return query_dict[query], (len_to_tied_forward_notes, len_to_non_tied_notes, len_to_rests, note_length_to_token_ids, rest_length_to_token_ids)
     
+    # if not, we need to compute it and cache it
+    tied_forward = len_to_rests if want_rest else len_to_tied_forward_notes
+    non_tied = len_to_rests if want_rest else len_to_non_tied_notes
+    
+    result = non_tied.get(query, []) # initialize with non-tied tokens of query length
+    
+    for tied_length, tied_token_ids in tied_forward.items():
+        if tied_length >= query or tied_length == 0:
+            continue
+        
+        if query - tied_length in non_tied:
+            # then, add all pairs 
+            for tied_token_id in tied_token_ids:
+                for non_tied_token_id in non_tied[query - tied_length]:
+                    result.append([tied_token_id, non_tied_token_id])
+    # cache the result
+    query_dict[query] = result
+    return result, (len_to_tied_forward_notes, len_to_non_tied_notes, len_to_rests, note_length_to_token_ids, rest_length_to_token_ids)
+    
+def get_note_and_length_to_token_id_dicts(id_to_token):
     note_length_to_token_ids = {}
     rest_length_to_token_ids = {}
-    
-    
     for token_id, token in id_to_token.items():
         if token in CONST_TOKENS:
             continue
         curr_len = token.get_len()
-        
+
         if token.is_rest:
             rest_length_to_token_ids[curr_len] = rest_length_to_token_ids.get(curr_len, []) + [token_id]
         elif not token.tied_forward:
@@ -118,7 +166,7 @@ def get_note_and_length_to_token_id_dicts(id_to_token):
                     continue
                 token2_length = token2.get_len()
                 curr_len = note1_length + token2_length
-                note_length_to_token_ids[curr_len] = note_length_to_token_ids.get(curr_len, []) + [(token_id, token2_id)]
+                note_length_to_token_ids[curr_len] = note_length_to_token_ids.get(curr_len, []) + [[token_id, token2_id]]
                 
         elif token.is_rest:
             rest1_length = token.get_len()
@@ -127,8 +175,8 @@ def get_note_and_length_to_token_id_dicts(id_to_token):
                     continue
                 rest2_length = token2.get_len()
                 curr_len = rest1_length + rest2_length
-                rest_length_to_token_ids[curr_len] = rest_length_to_token_ids.get(curr_len, []) + [(token_id, rest2_id)]
-                
+                rest_length_to_token_ids[curr_len] = rest_length_to_token_ids.get(curr_len, []) + [[token_id, rest2_id]]
+
 
     return note_length_to_token_ids, rest_length_to_token_ids
         
@@ -186,7 +234,9 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
     """
     Decompose a note sequence into a list of notes and rests
     """
-    
+    assert note_sequence[0] == token_to_id[START_OF_SEQUENCE_TOKEN], "Note sequence must start with START_OF_SEQUENCE_TOKEN"
+    # assert note_sequence[-1] == token_to_id[END_OF_SEQUENCE_TOKEN], "Note sequence must end with END_OF_SEQUENCE_TOKEN"
+    print(note_sequence)
     if note_sequence[0] == token_to_id[START_OF_SEQUENCE_TOKEN]:
         # print("yes")
         note_sequence = note_sequence[1:]
@@ -201,12 +251,12 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
     # input()
     j = 0
     for i in range(len(note_sequence)):
-        # print(note_sequence[i])
-        if note_sequence[i] == token_to_id[START_OF_SEQUENCE_TOKEN]:
-            continue
-        # increment j if its a new onset: i is a note and i-1 is a rest or a non-tied note, edge case: i > 1 as you have sos at start
         curr_tok = id_to_token[note_sequence[i]]
         prev_tok = id_to_token[note_sequence[i-1]]
+        # print("m:", note_sequence[i])
+        # input()
+        # increment j if its a new onset: i is a note and i-1 is a rest or a non-tied note, edge case: i > 1 as you have sos at start
+        
         # if curr_tok == UNKNOWN_TOKEN:
         #     j += 1
         #     result += [[token_to_id[UNKNOWN_TOKEN]], [token_to_id[UNKNOWN_TOKEN]]]
@@ -217,15 +267,18 @@ def decompose_note_sequence(note_sequence: List, token_to_id, id_to_token) -> Li
                 j += 1 
                 result += [[[], []]]
                 detokenized_result += [[[], []]]
+            
+            #     print(curr_tok)
+            #     input()
+            if  not curr_tok.is_rest:
+                result[j][0].append(note_sequence[i])
+                detokenized_result[j][0].append(curr_tok)
+            else:
+                result[j][1].append(note_sequence[i])
+                detokenized_result[j][1].append(curr_tok)
         except:
             print(curr_tok)
-            # input()
-        if not curr_tok.is_rest:
-            result[j][0].append(note_sequence[i])
-            detokenized_result[j][0].append(curr_tok)
-        else:
-            result[j][1].append(note_sequence[i])
-            detokenized_result[j][1].append(curr_tok)
+            raise ValueError("Invalid token in note sequence: " + str(curr_tok))
     return result, detokenized_result
 
 def decompose_note_sequence_notes(note_sequence: List, token_to_id, id_to_token) -> List: # TODO: handle unks
@@ -364,6 +417,8 @@ def convert_alignment(alignment):
                 used_i2.add(i2_single)
 
     return final_dict
+
+
 
 if __name__ == "__main__":
     # tmp = [(1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False), (1, False, False, False, False, False, False), (1, False, False, False, False, False, False), (2, False, False, False, False, False, False)]

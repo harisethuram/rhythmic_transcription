@@ -13,7 +13,7 @@ from fractions import Fraction
 
 from ..model.BetaChannel import BetaChannel
 from ..model.RhythmLSTM import RhythmLSTM
-from ..utils import get_note_and_length_to_token_id_dicts, decompose_note_sequence
+from ..utils import get_note_and_length_to_token_id_dicts, decompose_note_sequence, get_tokens_given_length
 from ..note.Note import Note
 from const_tokens import *
 
@@ -21,7 +21,7 @@ class Decoder(nn.Module):
     """
     Class that does the decoding of the output of an onset quantizer, into a sequence of notes. 
     """
-    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, base_value: float=1.0, unk_score=-1000):
+    def __init__(self, language_model: RhythmLSTM, beta_channel_model: BetaChannel, token_to_id: Dict, id_to_token: Dict, beam_width: int=5, base_value: float=1.0, alpha: float=1, unk_score=-1000):
         super(Decoder, self).__init__()
         self.language_model = language_model
         self.beta_channel_model = beta_channel_model
@@ -29,6 +29,7 @@ class Decoder(nn.Module):
         self.id_to_token = id_to_token
         self.beam_width = beam_width
         self.base_value = Fraction.from_float(base_value)
+        self.alpha = alpha
         self.unk_score = unk_score
 
     def decode(self, note_info: List, decode_method: str="greedy", flatten: bool=True, want_all_candidates: bool=False, debug: bool=False) -> List[int]: # TODO: make sure to output detokenized also in case of flattened
@@ -42,7 +43,7 @@ class Decoder(nn.Module):
         if decode_method == "greedy":
             out = self._greedy_decode(note_info, debug=debug)
         elif decode_method == "beam_search":
-            out = self._beam_search(note_info, want_all_candidates=want_all_candidates, debug=debug)
+            out = self._beam_search(note_info, want_all_candidates=want_all_candidates, mix_alpha=self.alpha, debug=debug)
         else:
             raise ValueError(f"Invalid decode method: {decode_method}, must be one of ['greedy', 'beam_search']") 
         
@@ -59,7 +60,7 @@ class Decoder(nn.Module):
             input()
         return result, detokenized_result
             
-    def _beam_search(self, note_info: List, want_all_candidates: bool=False, debug=False):
+    def _beam_search(self, note_info: List, want_all_candidates: bool=False, mix_alpha: float=1/20, mix_beta: float=1, debug: bool=False):
         def to_help(tensor):
             return tensor.to(self.language_model.device).to(torch.int64)
         
@@ -68,7 +69,11 @@ class Decoder(nn.Module):
             if len(x.shape) == 2:
                 x = x.squeeze()
             return x
-        
+        def mix_probs(a, b, alpha=mix_alpha, beta=mix_beta):
+            """
+            Mixes two log probabilities a and b using the formula: a * alpha + b * beta
+            """
+            return a * alpha + b * beta
         note_lengths = [float(note[0]) for note in note_info]
         note_portions = torch.Tensor([float(note[1]) for note in note_info])
         
@@ -80,10 +85,22 @@ class Decoder(nn.Module):
         candidate_rests_lengths = note_lengths_as_fraction * np.expand_dims(1 - modes, 0)
         all_beta_probs = self.beta_channel_model(note_portions) # all (num_notes, num_dists)
         all_beta_probs = F.logsigmoid(all_beta_probs)
+        # print(note_portions[:20])
+        # print(all_beta_probs[:20])
+        # print(all_beta_probs.shape)
+        # print(modes)
+        # print(self.beta_channel_model.params)
+        # print(note_portions[0], self.beta_channel_model(torch.Tensor([note_portions[0]])))
+        # input()
         
         note_length_to_id, rest_length_to_id = get_note_and_length_to_token_id_dicts(self.id_to_token)
+        print("got note and rest length to id dicts")
 
         results = [[self.token_to_id[START_OF_SEQUENCE_TOKEN]] for _ in range(self.beam_width)]
+        
+        # maybe we don't need to do decompose later and can just, more accurately, do it here.
+        results_decomposed = [[] for _ in range(self.beam_width)] # each element is a list of list of two lists. The outer list is for each beam, followed by a list for each onset, followed by one list for notes and one for rests. 
+        # example: [[], []]
         
         prefixes = [to_tensor(self.token_to_id[START_OF_SEQUENCE_TOKEN])]
         beam_log_probs = [0.0] # log probabilities of each beam upto this point
@@ -93,13 +110,14 @@ class Decoder(nn.Module):
         hidden_states = [tmp2]
         cell_states = [tmp3]        
 
-        print("all_beta_probs:", len(all_beta_probs))
+        # print("all_beta_probs:", len(all_beta_probs))
         
         self.language_model.eval()
-        
+        get_token_given_length_cache = None
         with torch.no_grad():
             for i, (beta_probs, candidate_note_lengths, candidate_rest_lengths) in tqdm(enumerate(zip(all_beta_probs, candidate_notes_lengths, candidate_rests_lengths))):
                 candidates_all_beams = [[] for _ in range(len(prefixes))] 
+                
                 beta_log_probs = beta_probs
                 # for each element of prefixes, we want to compute the probabilities of all candidates. 
                 # we want two arrays, first one consists of all the prefices of length beam_width, and the second consists of all tuples of (candidates, probability) for each prefix of shape (beam_width, num_candidates)
@@ -108,16 +126,24 @@ class Decoder(nn.Module):
                 
                 
                 for beam_no, (prefix, hidden_state, cell_state, next_token_log_probs) in enumerate(zip(prefixes, hidden_states, cell_states, next_token_log_probs_all_beams)):
-                    # print("beam_no:", beam_no)
+                    print("beam_no:", beam_no)
                     for beta_log_prob, candidate_note_length, candidate_rest_length in zip(beta_log_probs, candidate_note_lengths, candidate_rest_lengths):
+                        # candidate_note_ids, get_token_given_length_cache = get_tokens_given_length(self.id_to_token, query=candidate_note_length, want_rest=False, cache=get_token_given_length_cache)
+                        # candidate_rest_ids, get_token_given_length_cache = get_tokens_given_length(self.id_to_token, query=candidate_rest_length, want_rest=True, cache=get_token_given_length_cache)
                         candidate_note_ids = note_length_to_id.get(candidate_note_length, [])
                         candidate_rest_ids = rest_length_to_id.get(candidate_rest_length, []) 
-                        # if candidate note ids is empty, or candidate rest ids is empty and candidate rest length is not 0, then we can't proceed so we append an unk token
+                        print("lengths:", len(candidate_note_ids), len(candidate_rest_ids))
+                        # print("candidate note ids:", candidate_note_ids, "candidate rest ids:", candidate_rest_ids)
+                        # print("candidate note ids old:", candidate_note_ids_old, "candidate rest ids old:", candidate_rest_ids_old)
+                        # input()
+                        
+                        # if candidate note ids is empty, or candidate rest ids is empty and candidate rest length is not 0, then we can't proceed so we skip this candidate
                         if len(candidate_note_ids) == 0 or (len(candidate_rest_ids) == 0 and candidate_rest_length != 0):
-                            candidates_all_beams[beam_no].append((self.unk_score, to_tensor(self.token_to_id[UNKNOWN_TOKEN])))
                             continue
+                            # raise ValueError(f"Invalid candidate note ids: {candidate_note_ids} or candidate rest ids: {candidate_rest_ids} for note length: {candidate_note_length} and rest length: {candidate_rest_length}")
                         
                         for candidate_note_id in candidate_note_ids:
+                            print(candidate_note_id, end="\r")
                             candidate_note_id = to_tensor(candidate_note_id)
                             if len(candidate_note_id) == 1:
                                 note_prob = next_token_log_probs[..., -1, candidate_note_id]
@@ -126,12 +152,12 @@ class Decoder(nn.Module):
                                 note2_prob, _ = self.language_model(to_tensor(candidate_note_id[0]), hidden_state, cell_state)
                                 note2_prob = F.log_softmax(note2_prob, dim=-1)[..., -1, candidate_note_id[1]]
                                 note_prob = note1_prob + note2_prob
-                                
+                            
                             rest_logits, (note_hidden_state, note_cell_state) = self.language_model(candidate_note_id, hidden_state, cell_state)
                             rest_probs = F.log_softmax(rest_logits, dim=-1) 
                             
                             if candidate_rest_length == 0: # in this case there is only two choices: just the note, or the note followed by zero rest (this case is handled by the loop below)
-                                candidates_all_beams[beam_no].append((note_prob + beta_log_prob, candidate_note_id))
+                                candidates_all_beams[beam_no].append((mix_probs(note_prob, beta_log_prob), candidate_note_id))
                                 
                             
                             for candidate_rest_id in candidate_rest_ids:        
@@ -145,19 +171,19 @@ class Decoder(nn.Module):
                                     rest_prob = rest1_prob + rest2_prob
                                 
                                 next_prediction = torch.cat([candidate_note_id, candidate_rest_id], dim=-1)
-                                prob = note_prob + rest_prob + beta_log_prob
-                                
+                                prob = mix_probs(note_prob + rest_prob, beta_log_prob)
                                 candidates_all_beams[beam_no].append((prob, next_prediction))
-                                
+
                 # now we have all the candidates for all the beams, we need to select the top beam_width candidates for each beam
                 compiled_candidates = [] # list of tuples of (total_log_prob, beam_no, candidate)
-                # print(len(beam_log_probs), len(candidates_all_beams))
+                
                 for beam_no, (beam_log_prob, candidates) in enumerate(zip(beam_log_probs, candidates_all_beams)):
                     for curr_prob, candidate in candidates:
-                        # print("candidate:", candidate, curr_prob, beam_log_prob)
-                        # input()
-                        compiled_candidates.append((beam_log_prob + curr_prob, beam_no, candidate))
-                        
+                        compiled_candidates.append((beam_log_prob + curr_prob, beam_no, candidate))                
+                
+                if len(compiled_candidates) == 0:
+                    raise ValueError("No candidates found for the current beam search step. This might be due to invalid note lengths or rest lengths.")
+                
                 compiled_candidates = sorted(compiled_candidates, key=lambda x: x[0], reverse=True)
                 top_candidates = compiled_candidates[:self.beam_width]
                 

@@ -11,8 +11,8 @@ if __name__ == "__main__":
         piece = f"{row['piece_id']}_{row['piece_name']}_{row['part_id']}"
         for base_value in base_values:
             # input_path = os.path.join("output/presentation_results/ablations/perfect_decode/added_barlines", f"{piece}.json")
-            input_path = os.path.join("output/presentation_results/added_barlines_with_measure_lengths", piece, f"base_value_{base_value}", "output.json")
-            output_path = os.path.join("output/presentation_results/added_barlines_with_measure_lengths", piece, f"base_value_{base_value}", "output.xml")
+            input_path = os.path.join("output/presentation_results/test/does_lm_decode_work/mix_added_barlines_and_measure_lengths", piece, f"{base_value}", "output.json")
+            output_path = os.path.join("output/presentation_results/test/does_lm_decode_work/mix_added_barlines_and_measure_lengths", piece, f"{base_value}", "output.xml")
             
             if os.path.exists(input_path):
                 if os.path.exists(output_path):
