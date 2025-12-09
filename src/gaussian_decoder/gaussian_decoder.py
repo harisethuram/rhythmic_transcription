@@ -137,10 +137,11 @@ class GaussianDecoder(nn.Module):
         prefixes = [to_tensor([self.token_to_id[START_OF_SEQUENCE_TOKEN]], dtype=torch.long)]  # initial prefix with START token
         best_pitches = [[None]]
         prefix_scores = [0.0]  # initial scores
-        tmp1, (tmp2, tmp3) = self.rhythm_lstm(prefixes[0]) 
-        salloc -A ark --mem=64G --gres=gpu:1 --time=12:00:00 -p gpu-l40s
-        lstm_hidden_states = [tmp2]
-        lstm_cell_states = [tmp3]
+        _, (tmp1, tmp2) = self.rhythm_lstm(prefixes[0])
+        # print(first_token_logits.shape)
+        # input()
+        lstm_hidden_states = [tmp1]
+        lstm_cell_states = [tmp2]
         
         with torch.no_grad():
             for i, (duration, is_n, pitch) in enumerate(tqdm(zip(input_durations, is_note, pitches))): # iterate over input sequence
@@ -153,66 +154,155 @@ class GaussianDecoder(nn.Module):
                 possible_tokens = all_notes if is_n else all_rests # this is a mapping to gaussian id, not token id 
                 gaussian_scores = note_gaussian_scores[i, :] if is_n else rest_gaussian_scores[i, :] # get either note or rest gaussian scores
                 
-                for prefix, score, lstm_h, lstm_c, curr_pitches in zip(prefixes, prefix_scores, lstm_hidden_states, lstm_cell_states, best_pitches): # iterate over beam prefixes
+                # # parallelize the below loop now
+                all_tmp = [(k, v) for k, v in possible_tokens.items() if v[0] != zero_rest]
+                
+                all_gaussian_ids = [k for k, _ in all_tmp]
+                
+                all_events = [v for _, v in all_tmp]
+                
+                # # # use torch.gather to get all gaussian scores from all_gaussian_ids
+                curr_gaussian_scores = gaussian_scores[all_gaussian_ids].tolist() # (num possible events)
+                all_tokenized_events = [to_tensor([self.token_to_id[event] for event in token_events]) for token_events in all_events]                
+               
+                num_tokenized_events = len(all_tokenized_events)
+                num_beams = len(prefixes)
+                h_0_batch = torch.cat(lstm_hidden_states, dim=1).repeat(1, num_tokenized_events, 1)  # (num_layers, num_beams * num_tokenized_events, hidden_size), repeated at batch level i.e. all beams one copy, then all beams again
+                c_0_batch = torch.cat(lstm_cell_states, dim=1).repeat(1, num_tokenized_events, 1)  # (num_layers, num_beams * num_tokenized_events, cell_size)
+                first_token_logits = self.rhythm_lstm.fc(h_0_batch[-1]) # (num_beams * num_tokenized_events, vocab_size)
+
+                all_tokenized_events_repeated = [] # repeated by number of prefixes, at the token event level i.e. each token is repeated num_beams times before next token
+                for token_event in all_tokenized_events:
+                    all_tokenized_events_repeated.extend([token_event for _ in range(num_beams)])
                     
-                    # trying to parallelize the below loop
-                    all_tmp = [(k, v) for k, v in possible_tokens.items() if v[0] != zero_rest]
+                curr_gaussian_scores_repeated = []
+                for score in curr_gaussian_scores:
+                    curr_gaussian_scores_repeated.extend([score for _ in range(num_beams)])
                     
-                    all_gaussian_ids = [k for k, _ in all_tmp]
+                curr_gaussian_scores_repeated = to_tensor(curr_gaussian_scores_repeated, dtype=torch.float) # (num_beams * num_tokenized_events)
+
+                padded_all_tokenized_events = pad_sequence(all_tokenized_events_repeated, batch_first=True, padding_value=self.token_to_id[PADDING_TOKEN]) # (num_beams * all_tokenized_events_repeated, max_seq_length)
+                lengths = torch.Tensor([len(seq) for seq in all_tokenized_events_repeated]) # (num_possible_events)
+                
+                lstm_out_batch, (new_h_batch_tmp, new_c_batch_tmp) = self.rhythm_lstm(
+                    padded_all_tokenized_events,
+                    hidden=h_0_batch,
+                    c=c_0_batch,
+                    batched=True,
+                    lengths=lengths
+                ) # (num_beams * num_possible_events, seq_length, vocab_size), (num_layers, num_beams * num_possible_events, hidden_size), (num_layers, num_beams * num_possible_events, hidden_size)
+                
+                # now, for each sequence in the batch, compute the lm log probs and combine with gaussian log probs, batched
+                lstm_out_batch = torch.cat((first_token_logits.unsqueeze(1), lstm_out_batch), dim=1)[:, :-1, :]  # prepend first token logits and remove last time step to align with input
+                # lstm_out_batch, first_token_logits = lstm_out_batch[:, :-1, :], lstm_out_batch[:, -1, :]
+                
+                
+                
+                all_log_probs = F.log_softmax(lstm_out_batch, dim=-1)
+                
+                final_lm_log_probs = torch.gather(all_log_probs, -1, padded_all_tokenized_events.unsqueeze(-1)).squeeze(-1) # (num_beams * num_possible_events, seq_length)
+                
+                mask = (padded_all_tokenized_events != self.token_to_id[PADDING_TOKEN]).float() # (num_beams * num_possible_events, seq_length)
+                
+                assert torch.all((mask == 0) == (padded_all_tokenized_events == self.token_to_id[PADDING_TOKEN]))
+                
+                summed_lm_log_probs = (final_lm_log_probs * mask).sum(dim=1) # (num_beams * num_possible_events)
+                gaussian_log_probs = torch.log(curr_gaussian_scores_repeated + 1e-10) # (num_beams * num_possible_events)
+                combined_log_probs = (1 - self.lambda_param) * summed_lm_log_probs + self.lambda_param * gaussian_log_probs # (num_beams * num_possible_events)
+                
+                # repeat scores and prefixes accordingly
+                prefixes_repeated = prefixes * num_tokenized_events # each prefix repeated num_possible_events times
+                scores_repeated = prefix_scores * num_tokenized_events
+                pitches_repeated = best_pitches * num_tokenized_events
+                
+                # for _ in range(num_tokenized_events):
+                #     prefixes_repeated.extend(prefixes)
+                #     scores_repeated.extend(prefix_scores)
+                #     pitches_repeated.extend(best_pitches)
+                
+                # print(len(pitches_repeated))
+                # input()
+                scores_repeated = to_tensor(scores_repeated, dtype=torch.float) # (num_beams * num_possible_events)
+                
+                total_log_probs = scores_repeated + combined_log_probs  # add previous score to each (num_beams * num_possible_events)
+                
+                
+                all_candidates = [torch.cat((prefixes_repeated[i], all_tokenized_events_repeated[i])) for i in range(len(all_tokenized_events_repeated))]
+                all_scores = total_log_probs.tolist()
+                all_pitches = [pitches_repeated[i] + [pitch] * int(lengths[i].item()) for i, length in enumerate(lengths)]
+                all_lstm_h = [new_h_batch_tmp[:, i, :].unsqueeze(1) for i in range(new_h_batch_tmp.shape[1])]
+                all_lstm_c = [new_c_batch_tmp[:, i, :].unsqueeze(1) for i in range(new_c_batch_tmp.shape[1])]
+                
+                # now also consider the zero rest token (no new token added)
+                if not is_n:
+                    total_log_probs = to_tensor(prefix_scores, dtype=torch.float) + torch.log(gaussian_scores[len(possible_tokens)-1] + 1e-10)  # (num_beams)
+                    all_candidates.extend(prefixes)
+                    all_scores.extend(total_log_probs.tolist())
+                    all_lstm_h.extend(lstm_hidden_states)
+                    all_lstm_c.extend(lstm_cell_states)
+                    all_pitches.extend(best_pitches)
                     
-                    assert all([all_gaussian_ids[i] == i for i in range(len(all_gaussian_ids))]), "Gaussian IDs are not sequential!"
-                    all_events = [v for _, v in all_tmp]
+                
                     
-                    # use torch.gather to get all gaussian scores from all_gaussian_ids
-                    curr_gaussian_scores = gaussian_scores[all_gaussian_ids] # (num possible events)
-                    all_tokenized_events = [to_tensor([self.token_to_id[event] for event in token_events]) for token_events in all_events]
-                    h_0_batch = lstm_h.repeat(1, len(all_tokenized_events), 1)  # (num_layers, num_possible_events, hidden_size)
-                    c_0_batch = lstm_c.repeat(1, len(all_tokenized_events), 1)  # (num_layers, num_possible_events, hidden_size)
+                                
+                # for prefix, score, lstm_h, lstm_c, curr_pitches in zip(prefixes, prefix_scores, lstm_hidden_states, lstm_cell_states, best_pitches): # iterate over beam prefixes
+                #     all_tmp = [(k, v) for k, v in possible_tokens.items() if v[0] != zero_rest]
                     
-                    # pad sequences
-                    padded_all_tokenized_events = pad_sequence(all_tokenized_events, batch_first=True, padding_value=self.token_to_id[PADDING_TOKEN]) # (num_possible_events, max_seq_length)
-                    lengths = torch.Tensor([len(seq) for seq in all_tokenized_events]) # (num_possible_events)
+                #     all_gaussian_ids = [k for k, _ in all_tmp]
                     
-                    # forward pass through rhythm LSTM
-                    lstm_out_batch, (new_h_batch, new_c_batch) = self.rhythm_lstm(
-                        padded_all_tokenized_events, 
-                        hidden=h_0_batch, 
-                        c=c_0_batch, 
-                        batched=True, 
-                        lengths=lengths
-                    ) # (num_possible_events, seq_length, vocab_size), (num_layers, num_possible_events, hidden_size), (num_layers, num_possible_events, hidden_size)
+                #     assert all([all_gaussian_ids[i] == i for i in range(len(all_gaussian_ids))]), "Gaussian IDs are not sequential!"
+                #     all_events = [v for _, v in all_tmp]
                     
-                    # now, for each sequence in the batch, compute the lm log probs and combine with gaussian log probs, batched
-                    all_log_probs = F.log_softmax(lstm_out_batch, dim=-1) # (num_possible_events, seq_length, vocab_size)
+                #     # use torch.gather to get all gaussian scores from all_gaussian_ids
+                #     curr_gaussian_scores = gaussian_scores[all_gaussian_ids] # (num possible events)
+                #     all_tokenized_events = [to_tensor([self.token_to_id[event] for event in token_events]) for token_events in all_events]
+                #     h_0_batch = lstm_h.repeat(1, len(all_tokenized_events), 1)  # (num_layers, num_possible_events, hidden_size)
+                #     c_0_batch = lstm_c.repeat(1, len(all_tokenized_events), 1)  # (num_layers, num_possible_events, hidden_size)
                     
-                    # gather lm log probs for each token event
-                    final_lm_log_probs = torch.gather(all_log_probs, -1, padded_all_tokenized_events.unsqueeze(-1)).squeeze(-1) # (num_possible_events, seq_length)
-                    mask = (padded_all_tokenized_events != self.token_to_id[PADDING_TOKEN]).float() # (num_possible_events, seq_length)
+                #     # pad sequences
+                #     padded_all_tokenized_events = pad_sequence(all_tokenized_events, batch_first=True, padding_value=self.token_to_id[PADDING_TOKEN]) # (num_possible_events, max_seq_length)
+                #     lengths = torch.Tensor([len(seq) for seq in all_tokenized_events]) # (num_possible_events)
                     
-                    assert torch.all((mask == 0) == (padded_all_tokenized_events == self.token_to_id[PADDING_TOKEN]))
+                #     # forward pass through rhythm LSTM
+                #     lstm_out_batch, (new_h_batch, new_c_batch) = self.rhythm_lstm(
+                #         padded_all_tokenized_events, 
+                #         hidden=h_0_batch, 
+                #         c=c_0_batch, 
+                #         batched=True, 
+                #         lengths=lengths
+                #     ) # (num_possible_events, seq_length, vocab_size), (num_layers, num_possible_events, hidden_size), (num_layers, num_possible_events, hidden_size)
                     
-                    summed_lm_log_probs = (final_lm_log_probs * mask).sum(dim=1)  # sum over sequence length, (num_possible_events)
-                    gaussian_log_probs = torch.log(curr_gaussian_scores + 1e-10) # (num_possible_events)
-                    combined_log_probs = (1 - self.lambda_param) * summed_lm_log_probs + self.lambda_param * gaussian_log_probs # (num_possible_events)
-                    total_log_probs = score + combined_log_probs  # add previous score to each (num_possible_events)
+                #     # now, for each sequence in the batch, compute the lm log probs and combine with gaussian log probs, batched
+                #     all_log_probs = F.log_softmax(lstm_out_batch, dim=-1) # (num_possible_events, seq_length, vocab_size)
+                    
+                #     # gather lm log probs for each token event
+                #     final_lm_log_probs = torch.gather(all_log_probs, -1, padded_all_tokenized_events.unsqueeze(-1)).squeeze(-1) # (num_possible_events, seq_length)
+                #     mask = (padded_all_tokenized_events != self.token_to_id[PADDING_TOKEN]).float() # (num_possible_events, seq_length)
+                    
+                #     assert torch.all((mask == 0) == (padded_all_tokenized_events == self.token_to_id[PADDING_TOKEN]))
+                    
+                #     summed_lm_log_probs = (final_lm_log_probs * mask).sum(dim=1)  # sum over sequence length, (num_possible_events)
+                #     gaussian_log_probs = torch.log(curr_gaussian_scores + 1e-10) # (num_possible_events)
+                #     combined_log_probs = (1 - self.lambda_param) * summed_lm_log_probs + self.lambda_param * gaussian_log_probs # (num_possible_events)
+                #     total_log_probs = score + combined_log_probs  # add previous score to each (num_possible_events)
                     
                     
-                    # TODO: update all_candidates, all_scores, all_lstm_h, all_lstm_c, all_pitches with batched results
-                    scaled_prefixes = prefix.unsqueeze(0).repeat(len(all_tokenized_events), 1)  # (num_possible_events, seq_length)
-                    all_candidates += [torch.cat((scaled_prefixes[i], all_tokenized_events[i])) for i in range(len(all_tokenized_events))]
-                    all_scores += total_log_probs.tolist()
-                    all_pitches += [curr_pitches + [pitch] * int(length) for length in lengths.tolist()]
-                    all_lstm_h += [new_h_batch[:, i, :].unsqueeze(1) for i in range(new_h_batch.shape[1])]
-                    all_lstm_c += [new_c_batch[:, i, :].unsqueeze(1) for i in range(new_c_batch.shape[1])]
+                #     # TODO: update all_candidates, all_scores, all_lstm_h, all_lstm_c, all_pitches with batched results
+                #     scaled_prefixes = prefix.unsqueeze(0).repeat(len(all_tokenized_events), 1)  # (num_possible_events, seq_length)
+                #     all_candidates += [torch.cat((scaled_prefixes[i], all_tokenized_events[i])) for i in range(len(all_tokenized_events))]
+                #     all_scores += total_log_probs.tolist()
+                #     all_pitches += [curr_pitches + [pitch] * int(length) for length in lengths.tolist()]
+                #     all_lstm_h += [new_h_batch[:, i, :].unsqueeze(1) for i in range(new_h_batch.shape[1])]
+                #     all_lstm_c += [new_c_batch[:, i, :].unsqueeze(1) for i in range(new_c_batch.shape[1])]
                     
-                    if not is_n: # also consider the zero rest token (no new token added)
-                        total_log_prob = score + torch.log(gaussian_scores[len(possible_tokens)-1] + 1e-10).item()
+                #     if not is_n: # also consider the zero rest token (no new token added)
+                #         total_log_prob = score + torch.log(gaussian_scores[len(possible_tokens)-1] + 1e-10).item()
                         
-                        all_candidates.append(prefix) # no new token added
-                        all_scores.append(total_log_prob)
-                        all_lstm_h.append(lstm_h)
-                        all_lstm_c.append(lstm_c)
-                        all_pitches.append(curr_pitches)
+                #         all_candidates.append(prefix) # no new token added
+                #         all_scores.append(total_log_prob)
+                #         all_lstm_h.append(lstm_h)
+                #         all_lstm_c.append(lstm_c)
+                #         all_pitches.append(curr_pitches)
                         
                 if all_candidates:
                     top_k_indices = torch.topk(torch.tensor(all_scores), k=min(self.beam_width, len(all_scores))).indices
@@ -298,13 +388,15 @@ class GaussianDecoder(nn.Module):
         best_scores = []
         for prefix, score, lstm_h, lstm_c in zip(prefixes, prefix_scores, lstm_hidden_states, lstm_cell_states):
             curr_candidate = to_tensor(torch.cat((prefix, to_tensor([self.token_to_id[END_OF_SEQUENCE_TOKEN]]))))
-            lstm_out, (new_lstm_h, new_lstm_c) = self.rhythm_lstm(curr_candidate)
-            lm_log_prob = F.log_softmax(lstm_out[-1, :], dim=-1)[self.token_to_id[END_OF_SEQUENCE_TOKEN]].item()
+            # lm_log_prob = F.log_softmax(lstm_out[-1, :], dim=-1)[self.token_to_id[END_OF_SEQUENCE_TOKEN]].item()
+            lm_log_prob = self.rhythm_lstm.fc(lstm_h[-1])  # (1, vocab_size)
+            lm_log_prob = F.log_softmax(lm_log_prob, dim=-1)[0, self.token_to_id[END_OF_SEQUENCE_TOKEN]].item()
+            
             combined_log_prob = score + lm_log_prob
             best_sequences.append(curr_candidate)
             best_scores.append(combined_log_prob)
         # print("tok")
-        print(best_sequences)
+        # print(best_sequences)
         # convert best_sequences from token ids to Note sequences
         untokenized_best_sequences = []
         for seq in best_sequences:
@@ -317,6 +409,6 @@ class GaussianDecoder(nn.Module):
             best_pitch.append(None) # for the EOS token
         # print("unt")
         # print(untokenized_best_sequences)
-        print("length:", len(untokenized_best_sequences[0]), len(best_pitches[0]))
-        print(untokenized_best_sequences)
+        # print("length:", len(untokenized_best_sequences[0]), len(best_pitches[0]))
+        # print(untokenized_best_sequences)
         return untokenized_best_sequences, best_scores, best_pitches

@@ -26,7 +26,7 @@ class RhythmLSTM(nn.Module):
         x = self.embedding(x)
                 
         if batched:
-            # print("here",lengths.shape, lengths.dtype, lengths.device)
+            # print("here",lengths.shape, lengths.dtype, lengths.device
             if lengths is None or len(lengths) != x.shape[0]:
                 raise ValueError("lengths must be provided for batched input")
             
@@ -42,7 +42,7 @@ class RhythmLSTM(nn.Module):
             
         if batched:
             out, _ = pad_packed_sequence(out, batch_first=True)
-        
+
         out = self.fc(out) # shape: (batch_size, seq_length, vocab_size)
         if out.shape[0] == 1:
             out = out.squeeze(0)

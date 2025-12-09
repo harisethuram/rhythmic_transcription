@@ -91,7 +91,30 @@ def get_note_info_from_xml(xml_file_path: str, part_id: int):
     return result            
 
     
-    
+def midi_part_pitches(path: str, part_id: int) -> list:
+    # Parse the MIDI file
+    score = converter.parse(path)
+
+    # Get all parts and validate part_id
+    parts = score.parts
+    if part_id < 0 or part_id >= len(parts):
+        raise IndexError(f"part_id {part_id} is out of range (0..{len(parts)-1})")
+
+    part = parts[part_id]
+
+    # Flatten the part to a single stream in time order
+    flat = part.flatten().notesAndRests
+
+    pitches = []
+    for elem in flat:
+        if isinstance(elem, note.Note):
+            # nameWithOctave gives strings like "C#4", "D3", etc.
+            pitches.append(elem.pitch.nameWithOctave)
+        elif isinstance(elem, note.Rest):
+            pitches.append(None)
+        # Any other event types are ignored; monophonic assumption avoids chords
+
+    return pitches    
 
 def midi_to_onsets(midi_file_path: str):
     """
