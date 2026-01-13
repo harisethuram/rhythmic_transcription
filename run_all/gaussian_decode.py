@@ -17,6 +17,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     metadata = pd.read_csv("metadata/URMP/metadata.csv")
+    metadata = metadata[metadata["split"] == "val"]
     
     for i, row in metadata.iterrows():
         input_path = row["notes_path"]

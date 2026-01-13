@@ -30,3 +30,6 @@ deprecated/
 lilypond-2.25.30/
 s_out/
 alignments/
+presentation_data/
+presentation_data_all/
+val_performances/

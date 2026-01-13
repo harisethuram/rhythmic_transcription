@@ -13,7 +13,7 @@ from src.gaussian_decoder.gaussian_decoder import GaussianDecoder
 from src.utils import serialize_json, decompose_note_sequence, convert_alignment, open_processed_data_dir
 from src.preprocess.ingestion_utils import read_note_text_file
 from src.note.Note import Note
-from src.const_tokens import *
+from src.const_tokens import *  
 from src.output_utils import note_pitches_to_xml_no_barlines
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -30,7 +30,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     warnings.filterwarnings("ignore")  # Suppress UserWarnings
-
+    # if output dir exists, and folder isn't empty, exit
+    if os.path.exists(args.output_dir) and len(os.listdir(args.output_dir)) > 0 and os.path.exists(os.path.join(args.output_dir, "decoded_sequence_0.json")):
+        print(f"Output directory {args.output_dir} already exists. Exiting to avoid overwriting.")
+        sys.exit(1)
     event_lengths, pitches, is_note = read_note_text_file(args.input_path)
     rhythm_lstm = torch.load(args.rhythm_lstm_path)
 
@@ -46,6 +49,7 @@ if __name__ == "__main__":
     all_best_sequences = []
     all_best_scores = []
     all_best_pitches = []
+    all_best_tempos = []
     for tempo in tempos:
         print(f"Decoding for tempo: {tempo}")
         curr_best_sequences, curr_best_scores, curr_best_pitches = decoder(
@@ -58,11 +62,13 @@ if __name__ == "__main__":
         all_best_sequences.extend(curr_best_sequences)
         all_best_scores.extend(curr_best_scores)
         all_best_pitches.extend(curr_best_pitches)
+        all_best_tempos.extend([tempo]*len(curr_best_sequences))
         
     best_sequences = all_best_sequences
     best_scores = all_best_scores
     best_pitches = all_best_pitches
-        
+    best_tempos = all_best_tempos
+    
     # first assert that, wherever best_pithces is None, the sequence is a rest. Also, wherever best_pitches is not None, the sequence is a note.
     for seq, curr_pitches in zip(best_sequences, best_pitches):
         for tok, pitch in zip(seq, curr_pitches):
@@ -76,18 +82,22 @@ if __name__ == "__main__":
     best_sequences = [best_sequences[i] for i in best_idxs]
     best_scores = [best_scores[i] for i in best_idxs]
     best_pitches = [best_pitches[i] for i in best_idxs]
-
+    best_tempos = [best_tempos[i] for i in best_idxs]
+    print(best_scores)
+    print(best_tempos)
+    print(best_idxs)
     # save output
-    results = {i: {"sequence": seq, "score": score, "pitches": curr_pitches} for i, (seq, score, curr_pitches) in enumerate(zip(best_sequences, best_scores, best_pitches))}
+    results = {i: {"sequence": seq, "score": score, "pitches": curr_pitches, "tempo": curr_tempo} for i, (seq, score, curr_pitches, curr_tempo) in enumerate(zip(best_sequences, best_scores, best_pitches, best_tempos))}
     
     os.makedirs(args.output_dir, exist_ok=True)
     
     # for now just load the saved
-    for i, (seq, score, curr_pitches) in enumerate(zip(best_sequences,
+    for i, (seq, score, curr_pitches, curr_tempo) in enumerate(zip(best_sequences,
                                                         best_scores,
-                                                        best_pitches)):
+                                                        best_pitches,
+                                                        best_tempos)):
         seq_output_path = os.path.join(args.output_dir, f"decoded_sequence_{i}.json")
-        seq_result = {"sequence": [str((str(s), pitch)) for s, pitch in zip(seq, curr_pitches)], "score": score}
+        seq_result = {"sequence": [str((str(s), pitch)) for s, pitch in zip(seq, curr_pitches)], "score": score, "tempo": curr_tempo}
         with open(seq_output_path, 'w') as f:
             json.dump(seq_result, f, indent=4)    
                 
@@ -96,5 +106,3 @@ if __name__ == "__main__":
         curr_pitches = curr_pitches[1:-1]
         mxl_output_path = os.path.join(args.output_dir, f"decoded_sequence_{i}.ly")
         note_pitches_to_xml_no_barlines(seq, curr_pitches, mxl_output_path, num_events_per_measure=16)
-        
-    

@@ -38,7 +38,7 @@ def split_score_into_parts(score_path, output_path, wanted_part_id):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Write out the selected part
-    part.write("musicxml", fp=output_path)
+    part.write("midi", fp=output_path)
 
     print(f"Saved part {wanted_part_id} → {output_path}")
 
@@ -49,16 +49,18 @@ if __name__ == "__main__":
     # iterate over rows
     new_col = []
     for index, row in tqdm(metadata.iterrows(), total=len(metadata)):
-        score_path = row["score_path"]
-        
-        output_path = os.path.join(*score_path.split("/")[:-1]) + f"/Sco_{row['piece_id']}_{row['piece_name']}_" + f"{row['part_id']}.xml"
-        try:
-            if not os.path.exists(output_path):
-                split_score_into_parts(score_path, output_path, int(row['part_id']))
+        if row["split"] == "val":
+            score_path = row["score_path"]
             
-        except Exception as e:
-            print(f"Error processing {score_path} part {row['part_id']}: {e}")
-        new_col.append(output_path)
+            # output_path = os.path.join(*score_path.split("/")[:-1]) + f"/Sco_{row['piece_id']}_{row['piece_name']}_" + f"{row['part_id']}.xml"
+            output_path = f"val_scores/Sco_{row['piece_id']}_{row['piece_name']}_{row['part_id']}.midi"
+            try:
+                if not os.path.exists(output_path):
+                    split_score_into_parts(score_path, output_path, int(row['part_id']))
+                
+            except Exception as e:
+                print(f"Error processing {score_path} part {row['part_id']}: {e}")
+            new_col.append(output_path)
         # print(output_path_format)
         # input()
     
